@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Post = require('../models/PostModel');
+const Post = require('../models/postModel');
 const Notification = require('../models/notificationModel'); // Added to support Signals
 
 // 1. CREATE: Save a new post (Supports text, multiple media URLs, and visibility)

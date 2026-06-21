@@ -35,7 +35,7 @@ export default function Onboarding() {
       }
 
       // 2. Send the data to your Backend
-      await axios.put('http://localhost:5000/api/auth/update-profile', {
+      await axios.put('http://https://v26.onrender.com/api/auth/update-profile', {
         email: userEmail,
         talent: specificTalent,
         vision: vision

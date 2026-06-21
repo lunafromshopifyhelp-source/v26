@@ -64,7 +64,7 @@ export default function VaultDepositModal({ onClose, onSuccess }: { onClose: () 
     formData.append('creatorEmail', localStorage.getItem('v26UserEmail') || 'system-fallback@v26.io'); 
 
     try {
-      const response = await axios.post('http://localhost:5000/api/projects/deposit', formData, {
+      const response = await axios.post('http://https://v26.onrender.com/api/projects/deposit', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) setProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));

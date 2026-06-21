@@ -18,11 +18,11 @@ import VaultDepositModal from '@/components/VaultDepositModal';export default fu
 
     try {
       // 1. Fetch user data profile
-      const profileRes = await axios.get(`http://localhost:5000/api/auth/profile/${email}`);
+      const profileRes = await axios.get(`http://https://v26.onrender.com/api/auth/profile/${email}`);
       setUserData(profileRes.data);
 
       // 2. Fetch direct asset count for stats row
-      const vaultRes = await axios.get(`http://localhost:5000/api/projects/vault/${email}`);
+      const vaultRes = await axios.get(`http://https://v26.onrender.com/api/projects/vault/${email}`);
       if (Array.isArray(vaultRes.data)) {
         setVaultCount(vaultRes.data.length);
       }

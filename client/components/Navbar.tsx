@@ -13,7 +13,7 @@ export default function Navbar() {
     const checkSignals = async () => {
       if (!userEmail) return;
       try {
-        const res = await axios.get(`http://localhost:5000/api/notifications/${userEmail}`);
+        const res = await axios.get(`http://https://v26.onrender.com/api/notifications/${userEmail}`);
         const unread = res.data.filter((s: any) => !s.read).length;
         setSignalCount(unread);
       } catch (err) {

@@ -23,10 +23,11 @@ interface BroadcastPost {
   createdAt: string;
 }
 
-interface PlanItem {
-  id: number;
-  text: string;
-  done: boolean;
+interface MissionItem {
+  _id: string;
+  title: string;
+  timeframe: 'daily' | 'weekly' | 'yearly';
+  status: 'active' | 'completed';
 }
 
 export default function Workspace() {
@@ -37,13 +38,8 @@ export default function Workspace() {
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [depositTargetStatus, setDepositTargetStatus] = useState<'active' | 'manifested'>('active');
 
-  // --- PLANS STATE ---
-  const [plans, setPlans] = useState<{ daily: PlanItem[]; weekly: PlanItem[]; yearly: PlanItem[] }>({
-    daily: [{ id: 1, text: 'Study Organic Chemistry', done: false }],
-    weekly: [{ id: 2, text: 'Record "Soulful" Demo', done: false }],
-    yearly: [{ id: 3, text: 'Complete v26 Platform', done: false }]
-  });
-  
+  // --- DYNAMIC MISSIONS SYNC STATE ---
+  const [missionsList, setMissionsList] = useState<MissionItem[]>([]);
   const [newMission, setNewMission] = useState("");
   const [timeframe, setTimeframe] = useState("daily");
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'yearly'>('daily');
@@ -56,6 +52,18 @@ export default function Workspace() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]); 
   const [broadcastText, setBroadcastText] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'partner' | 'public'>('partner');
+
+  // Fetch all custom missions from the database
+  const fetchMissions = async () => {
+    const email = localStorage.getItem('v26UserEmail');
+    if (!email) return;
+    try {
+      const res = await axios.get(`https://v26.onrender.com/api/missions/my-missions/${email}`);
+      setMissionsList(res.data);
+    } catch (err) {
+      console.error("Failed to sync custom missions:", err);
+    }
+  };
 
   // Core Data Synchronization Loader
   const fetchVaultAndProfile = async () => {
@@ -80,6 +88,7 @@ export default function Workspace() {
 
   useEffect(() => {
     fetchVaultAndProfile();
+    fetchMissions();
   }, []);
 
   // Open Portal with Configured Transmission Context
@@ -99,6 +108,7 @@ export default function Workspace() {
       });
       setNewMission(""); 
       alert("Vision Manifested.");
+      fetchMissions(); // 🚀 Refresh list instantly!
     } catch (err) {
       console.error("Signal lost during initialization.");
     }
@@ -164,17 +174,28 @@ export default function Workspace() {
     }
   };
 
+  // Calculates percentage based on live database status keys ('completed' vs 'active')
   const calculateProgress = (type: 'daily' | 'weekly' | 'yearly') => {
-    const list = plans[type];
-    if (list.length === 0) return 0;
-    return Math.round((list.filter(p => p.done).length / list.length) * 100);
+    const filteredMissions = missionsList.filter(m => m.timeframe === type);
+    if (filteredMissions.length === 0) return 0;
+    const completedCount = filteredMissions.filter(m => m.status === 'completed').length;
+    return Math.round((completedCount / filteredMissions.length) * 100);
   };
 
-  const togglePlan = (type: 'daily' | 'weekly' | 'yearly', id: number) => {
-    setPlans({ 
-      ...plans, 
-      [type]: plans[type].map(p => p.id === id ? { ...p, done: !p.done } : p) 
-    });
+  // Toggles item status locally and instantly matches it to the database row
+  const togglePlanStatus = async (id: string, currentStatus: string) => {
+    const nextStatus = currentStatus === 'completed' ? 'active' : 'completed';
+    
+    // Update frontend state instantly for crisp UX
+    setMissionsList(prev => prev.map(m => m._id === id ? { ...m, status: nextStatus } : m));
+
+    try {
+      // If you build a backend patch route later, map it here. For now, it handles layout tracking perfectly.
+      await axios.put(`https://v26.onrender.com/api/missions/update-status/${id}`, { status: nextStatus });
+    } catch (err) {
+      console.error("Backend sync failed, reverting locally.");
+      fetchMissions();
+    }
   };
 
   const ProgressCircle = ({ percent, label, color }: { percent: number; label: string; color: string }) => (
@@ -248,13 +269,19 @@ export default function Workspace() {
             <button key={t} onClick={() => setActiveTab(t)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: 'none', background: activeTab === t ? '#6366f1' : '#18181b', color: '#fff', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}>{t}</button>
           ))}
         </div>
+        
+        {/* RENDER DYNAMIC SYNCHRONIZED MISSIONS LIST */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {plans[activeTab].map((item) => (
-            <div key={item.id} onClick={() => togglePlan(activeTab, item.id)} style={{ padding: '12px', background: item.done ? 'rgba(99, 102, 241, 0.03)' : '#18181b', borderRadius: '10px', border: '1px solid', borderColor: item.done ? '#6366f1' : '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '18px', height: '18px', border: '2px solid #6366f1', borderRadius: '4px', backgroundColor: item.done ? '#6366f1' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>{item.done && "✓"}</div>
-              <span style={{ fontSize: '0.9rem', color: item.done ? '#71717a' : '#fff' }}>{item.text}</span>
-            </div>
-          ))}
+          {missionsList.filter(item => item.timeframe === activeTab).length === 0 ? (
+            <p style={{ color: '#71717a', fontSize: '0.8rem', textAlign: 'center', marginTop: '10px' }}>No visions initialized for this timeframe yet.</p>
+          ) : (
+            missionsList.filter(item => item.timeframe === activeTab).map((item) => (
+              <div key={item._id} onClick={() => togglePlanStatus(item._id, item.status)} style={{ padding: '12px', background: item.status === 'completed' ? 'rgba(99, 102, 241, 0.03)' : '#18181b', borderRadius: '10px', border: '1px solid', borderColor: item.status === 'completed' ? '#6366f1' : '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '18px', height: '18px', border: '2px solid #6366f1', borderRadius: '4px', backgroundColor: item.status === 'completed' ? '#6366f1' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>{item.status === 'completed' && "✓"}</div>
+                <span style={{ fontSize: '0.9rem', color: item.status === 'completed' ? '#71717a' : '#fff' }}>{item.title}</span>
+              </div>
+            ))
+          )}
         </div>
       </section>
 

@@ -1,7 +1,9 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import VaultDepositModal from '@/components/VaultDepositModal';interface UserProfile {
+import VaultDepositModal from '@/components/VaultDepositModal';
+
+interface UserProfile {
   email?: string;
   displayName?: string; 
   partnerEmail?: string;
@@ -191,10 +193,10 @@ export default function Workspace() {
   );
 
   return (
-    <div style={{ backgroundColor: '#09090b', color: '#fff', minHeight: '100vh', display: 'flex', fontFamily: '"Inter", sans-serif' }}>
+    <div className="workspace-main-container">
       
       {/* LEFT: COMMAND CENTER */}
-      <section style={{ width: '35%', borderRight: '1px solid #27272a', padding: '30px', overflowY: 'auto' }}>
+      <section className="left-command-panel">
         <h2 style={{ fontSize: '1.4rem', fontWeight: '900', marginBottom: '25px', color: '#6366f1' }}>Command Center</h2>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '35px', background: '#18181b', padding: '15px', borderRadius: '15px', border: '1px solid #27272a' }}>
@@ -210,7 +212,7 @@ export default function Workspace() {
             value={newMission} 
             onChange={(e) => setNewMission(e.target.value)}
             placeholder="What are we manifesting?" 
-            style={{ width: '100%', background: '#09090b', border: '1px solid #27272a', color: '#fff', padding: '12px', borderRadius: '12px', marginBottom: '10px' }} 
+            style={{ width: '100%', background: '#09090b', border: '1px solid #27272a', color: '#fff', padding: '12px', borderRadius: '12px', marginBottom: '10px', boxSizing: 'border-box' }} 
           />
           <div style={{ display: 'flex', gap: '8px' }}>
             <select 
@@ -236,7 +238,7 @@ export default function Workspace() {
         <div style={{ marginBottom: '25px', padding: '15px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid #312e81' }}>
           <p style={{ fontSize: '0.75rem', color: '#a5b4fc', marginBottom: '10px' }}>Link Accountability Partner</p>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <input value={partnerEmail} onChange={(e) => setPartnerEmail(e.target.value)} placeholder="Partner Email..." style={{ flexGrow: 1, padding: '8px', fontSize: '0.8rem', background: '#09090b', border: '1px solid #27272a', color: '#fff', borderRadius: '6px' }} />
+            <input value={partnerEmail} onChange={(e) => setPartnerEmail(e.target.value)} placeholder="Partner Email..." style={{ flexGrow: 1, padding: '8px', fontSize: '0.8rem', background: '#09090b', border: '1px solid #27272a', color: '#fff', borderRadius: '6px', boxSizing: 'border-box' }} />
             <button onClick={linkPartner} disabled={isLinking} style={{ padding: '8px 12px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>{isLinking ? '...' : 'Link'}</button>
           </div>
         </div>
@@ -269,7 +271,7 @@ export default function Workspace() {
             ))}
           </div>
 
-          <textarea value={broadcastText} onChange={(e) => setBroadcastText(e.target.value)} placeholder="Tell your partner about today's win..." style={{ width: '100%', padding: '15px', background: 'rgba(0,0,0,0.3)', color: '#fff', borderRadius: '12px', border: '1px solid #27272a', marginBottom: '15px', fontSize: '0.9rem', outline: 'none', resize: 'none' }} />
+          <textarea value={broadcastText} onChange={(e) => setBroadcastText(e.target.value)} placeholder="Tell your partner about today's win..." style={{ width: '100%', padding: '15px', background: 'rgba(0,0,0,0.3)', color: '#fff', borderRadius: '12px', border: '1px solid #27272a', marginBottom: '15px', fontSize: '0.9rem', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
           
           {selectedFiles.length > 0 && (
             <div style={{ marginBottom: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px' }}>
@@ -350,7 +352,7 @@ export default function Workspace() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <div className="vault-sections-grid">
             
             {/* SECTION A: ACTIVE FREQUENCIES */}
             <div style={{ background: '#09090b', padding: '20px', borderRadius: '15px', border: '1px solid #27272a' }}>
@@ -416,6 +418,46 @@ export default function Workspace() {
           onSuccess={fetchVaultAndProfile} 
         />
       )}
+
+      {/* Responsive Structural Media Rules */}
+      <style jsx global>{`
+        .workspace-main-container {
+          background-color: #09090b; 
+          color: #fff; 
+          min-height: 100vh; 
+          display: flex; 
+          flex-direction: row;
+          font-family: "Inter", sans-serif;
+        }
+
+        .left-command-panel {
+          width: 35%; 
+          border-right: 1px solid #27272a; 
+          padding: 30px; 
+          overflow-y: auto;
+        }
+
+        .vault-sections-grid {
+          display: grid; 
+          grid-template-columns: 1fr 1fr; 
+          gap: 20px;
+        }
+
+        @media (max-width: 1024px) {
+          .workspace-main-container {
+            flex-direction: column !important;
+          }
+          .left-command-panel {
+            width: 100% !important;
+            border-right: none !important;
+            border-bottom: 1px solid #27272a;
+            box-sizing: border-box;
+          }
+          .vault-sections-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -14,7 +14,7 @@ export default function Register() {
 
     try {
       // Connecting to your Backend Brain on Port 5000
-      const response = await axios.post('http://https://v26.onrender.com/api/auth/register', formData);
+      const response = await axios.post('https://v26.onrender.com/api/auth/register', formData);
 
       if (response.status === 201 || response.status === 200) {
         alert("Registration Successful! Your journey of purpose begins.");

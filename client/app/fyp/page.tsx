@@ -36,7 +36,7 @@ export default function DiscoverFeed() {
     const fetchPublicFeed = async () => {
       try {
         // 2. Swapped to hit your Bridge's public-feed router endpoint instead of projects
-        const res = await axios.get('http://https://v26.onrender.com/api/posts/public-feed');
+        const res = await axios.get('https://v26.onrender.com/api/posts/public-feed');
         setBroadcasts(res.data);
       } catch (err) {
         console.error("Failed to transmit global public bridge feed data:", err);
@@ -59,7 +59,7 @@ export default function DiscoverFeed() {
 
       // Hits your interaction engine configured for bridge posts
       const res = await axios.post(
-        `http://https://v26.onrender.com/api/posts/${postId}/inspire`,
+        `https://v26.onrender.com/api/posts/${postId}/inspire`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -95,7 +95,7 @@ export default function DiscoverFeed() {
       }
 
       const response = await axios.post(
-        `http://https://v26.onrender.com/api/posts/${postId}/discuss`,
+        `https://v26.onrender.com/api/posts/${postId}/discuss`,
         { text: commentText, userName: localStorage.getItem('v26UserEmail')?.split('@')[0] || "Creator" },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -224,7 +224,7 @@ export default function DiscoverFeed() {
                     {post.media.map((imgUrl, i) => (
                       <img 
                         key={i} 
-                        src={imgUrl.startsWith('http') ? imgUrl : `http://https://v26.onrender.com${imgUrl}`} 
+                        src={imgUrl.startsWith('http') ? imgUrl : `https://v26.onrender.com${imgUrl}`} 
                         alt="broadcast capture" 
                         style={{ width: '100%', maxHeight: '350px', objectFit: 'cover', borderRadius: '12px', border: '1px solid #27272a' }} 
                       />

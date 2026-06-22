@@ -19,7 +19,7 @@ export default function Inbox() {
     const fetchSignals = async () => {
       const email = localStorage.getItem('v26UserEmail');
       try {
-        const res = await axios.get(`http://https://v26.onrender.com/api/notifications/${email}`);
+        const res = await axios.get(`https://v26.onrender.com/api/notifications/${email}`);
         setSignals(res.data);
       } catch (err) { console.error(err); }
       finally { setLoading(false); }

@@ -61,15 +61,15 @@ export default function Workspace() {
     if (!email) return;
     try {
       // Synchronize Profile Data
-      const res = await axios.get(`http://https://v26.onrender.com/api/auth/profile/${email}`);
+      const res = await axios.get(`https://v26.onrender.com/api/auth/profile/${email}`);
       setUserProfile(res.data);
       
       // Synchronize Broadcast Feed
-      const postsRes = await axios.get(`http://https://v26.onrender.com/api/posts/bridge/${email}/${res.data.partnerEmail || 'none'}`);
+      const postsRes = await axios.get(`https://v26.onrender.com/api/posts/bridge/${email}/${res.data.partnerEmail || 'none'}`);
       setBroadcasts(postsRes.data);
 
       // Synchronize Vault Metrics
-      const vaultRes = await axios.get(`http://https://v26.onrender.com/api/projects/vault/${email}`);
+      const vaultRes = await axios.get(`https://v26.onrender.com/api/projects/vault/${email}`);
       setProjects(vaultRes.data);
     } catch (err) { 
       console.error("Workspace synchronization failed:", err); 
@@ -90,7 +90,7 @@ export default function Workspace() {
     if (!newMission) return;
     const email = localStorage.getItem('v26UserEmail');
     try {
-      await axios.post('http://https://v26.onrender.com/api/missions/create-mission', {
+      await axios.post('https://v26.onrender.com/api/missions/create-mission', {
         creatorEmail: email,
         title: newMission,
         timeframe: timeframe
@@ -106,7 +106,7 @@ export default function Workspace() {
     const myEmail = localStorage.getItem('v26UserEmail');
     try {
       setIsLinking(true);
-      await axios.put('http://https://v26.onrender.com/api/auth/link-partner', { myEmail, partnerEmail });
+      await axios.put('https://v26.onrender.com/api/auth/link-partner', { myEmail, partnerEmail });
       alert("Invitation Sent!");
       fetchVaultAndProfile();
     } catch (err) { 
@@ -119,7 +119,7 @@ export default function Workspace() {
   const acceptMission = async () => {
     const myEmail = localStorage.getItem('v26UserEmail');
     try {
-      await axios.put('http://https://v26.onrender.com/api/auth/accept-mission', { 
+      await axios.put('https://v26.onrender.com/api/auth/accept-mission', { 
         myEmail, 
         requesterEmail: userProfile?.incomingRequest 
       });
@@ -142,7 +142,7 @@ export default function Workspace() {
     };
 
     try {
-      const res = await axios.post('http://https://v26.onrender.com/api/posts/create', postData);
+      const res = await axios.post('https://v26.onrender.com/api/posts/create', postData);
       setBroadcasts([res.data, ...broadcasts]);
       setBroadcastText('');
       setSelectedFiles([]); 
@@ -155,7 +155,7 @@ export default function Workspace() {
   const deletePost = async (id: string) => {
     if (!window.confirm("Delete this broadcast?")) return;
     try {
-      await axios.delete(`http://https://v26.onrender.com/api/posts/${id}`);
+      await axios.delete(`https://v26.onrender.com/api/posts/${id}`);
       setBroadcasts(broadcasts.filter(post => post._id !== id));
     } catch (err) { 
       alert("Delete failed"); 

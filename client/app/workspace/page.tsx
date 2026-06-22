@@ -26,7 +26,7 @@ interface BroadcastPost {
 interface MissionItem {
   _id: string;
   title: string;
-  timeframe: 'daily' | 'weekly' | 'yearly';
+  timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly';
   status: 'active' | 'completed';
 }
 
@@ -42,7 +42,7 @@ export default function Workspace() {
   const [missionsList, setMissionsList] = useState<MissionItem[]>([]);
   const [newMission, setNewMission] = useState("");
   const [timeframe, setTimeframe] = useState("daily");
-  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'yearly'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
 
   const [partnerEmail, setPartnerEmail] = useState('');
   const [isLinking, setIsLinking] = useState(false);
@@ -108,7 +108,7 @@ export default function Workspace() {
       });
       setNewMission(""); 
       alert("Vision Manifested.");
-      fetchMissions(); // 🚀 Refresh list instantly!
+      fetchMissions(); // Refresh list instantly!
     } catch (err) {
       console.error("Signal lost during initialization.");
     }
@@ -174,23 +174,18 @@ export default function Workspace() {
     }
   };
 
-  // Calculates percentage based on live database status keys ('completed' vs 'active')
-  const calculateProgress = (type: 'daily' | 'weekly' | 'yearly') => {
+  const calculateProgress = (type: 'daily' | 'weekly' | 'monthly' | 'yearly') => {
     const filteredMissions = missionsList.filter(m => m.timeframe === type);
     if (filteredMissions.length === 0) return 0;
     const completedCount = filteredMissions.filter(m => m.status === 'completed').length;
     return Math.round((completedCount / filteredMissions.length) * 100);
   };
 
-  // Toggles item status locally and instantly matches it to the database row
   const togglePlanStatus = async (id: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'completed' ? 'active' : 'completed';
-    
-    // Update frontend state instantly for crisp UX
     setMissionsList(prev => prev.map(m => m._id === id ? { ...m, status: nextStatus } : m));
 
     try {
-      // If you build a backend patch route later, map it here. For now, it handles layout tracking perfectly.
       await axios.put(`https://v26.onrender.com/api/missions/update-status/${id}`, { status: nextStatus });
     } catch (err) {
       console.error("Backend sync failed, reverting locally.");
@@ -220,9 +215,10 @@ export default function Workspace() {
       <section className="left-command-panel">
         <h2 style={{ fontSize: '1.4rem', fontWeight: '900', marginBottom: '25px', color: '#6366f1' }}>Command Center</h2>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '35px', background: '#18181b', padding: '15px', borderRadius: '15px', border: '1px solid #27272a' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '35px', background: '#18181b', padding: '15px', borderRadius: '15px', border: '1px solid #27272a' }}>
           <ProgressCircle percent={calculateProgress('daily')} label="Daily" color="#6366f1" />
           <ProgressCircle percent={calculateProgress('weekly')} label="Weekly" color="#a855f7" />
+          <ProgressCircle percent={calculateProgress('monthly')} label="Monthly" color="#22c55e" />
           <ProgressCircle percent={calculateProgress('yearly')} label="Yearly" color="#EAB308" />
         </div>
 
@@ -243,6 +239,7 @@ export default function Workspace() {
             >
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
             </select>
             <button onClick={handleInitialize} style={{ flexGrow: 1, padding: '10px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Launch</button>
@@ -265,7 +262,7 @@ export default function Workspace() {
         </div>
 
         <div style={{ display: 'flex', gap: '5px', marginBottom: '20px' }}>
-          {(['daily', 'weekly', 'yearly'] as const).map(t => (
+          {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(t => (
             <button key={t} onClick={() => setActiveTab(t)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: 'none', background: activeTab === t ? '#6366f1' : '#18181b', color: '#fff', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}>{t}</button>
           ))}
         </div>
@@ -388,14 +385,12 @@ export default function Workspace() {
                 <span style={{ color: '#4ade80', fontSize: '0.7rem' }}>{projects.filter((p: any) => p.status === 'active').length} Files</span>
               </div>
               <div style={{ minHeight: '100px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {projects.filter((p: any) => p.status === 'active').map((proj: any) => (
+                {projects.filter((p: any) => p.status === 'active').filter((p: any) => selectedTalent === 'All' || p.talent === selectedTalent).map((proj: any) => (
                   <div key={proj._id} style={{ background: '#18181b', padding: '10px', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid #27272a' }}>
                     <p style={{ color: '#fff' }}>{proj.title}</p>
                     <span style={{ color: '#71717a', fontSize: '0.6rem' }}>Modified: {new Date(proj.updatedAt).toLocaleDateString()}</span>
                   </div>
                 ))}
-                
-                {/* Linked Premium Drag & Drop Portal */}
                 <button 
                   onClick={() => triggerVaultDeposit('active')} 
                   style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px dashed #3f3f46', color: '#a1a1aa', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer' }}
@@ -412,14 +407,12 @@ export default function Workspace() {
                 <span style={{ color: '#fbbf24', fontSize: '0.7rem' }}>{projects.filter((p: any) => p.status === 'manifested').length} Assets</span>
               </div>
               <div style={{ minHeight: '100px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {projects.filter((p: any) => p.status === 'manifested').map((proj: any) => (
+                {projects.filter((p: any) => p.status === 'manifested').filter((p: any) => selectedTalent === 'All' || p.talent === selectedTalent).map((proj: any) => (
                   <div key={proj._id} style={{ background: '#18181b', padding: '10px', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid #27272a' }}>
                     <p style={{ color: '#fff' }}>{proj.title}</p>
                     <span style={{ color: '#71717a', fontSize: '0.6rem' }}>Manifested: {new Date(proj.updatedAt).toLocaleDateString()}</span>
                   </div>
                 ))}
-
-                {/* Linked Premium Drag & Drop Portal */}
                 <button 
                   onClick={() => triggerVaultDeposit('manifested')} 
                   style={{ width: '100%', padding: '10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid #fbbf24', color: '#fbbf24', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}

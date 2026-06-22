@@ -7,7 +7,14 @@ import { usePathname } from 'next/navigation';
 export default function Navbar() {
   const [signalCount, setSignalCount] = useState(0);
   const pathname = usePathname();
-  const userEmail = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // Safely capture localStorage on client mount to prevent dehydration mismatch errors
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setUserEmail(localStorage.getItem('v26UserEmail'));
+    }
+  }, []);
 
   useEffect(() => {
     const checkSignals = async () => {
@@ -22,7 +29,6 @@ export default function Navbar() {
     };
 
     checkSignals();
-    // Refresh signals every 30 seconds to keep the pulse live
     const interval = setInterval(checkSignals, 30000);
     return () => clearInterval(interval);
   }, [userEmail]);
@@ -57,33 +63,69 @@ export default function Navbar() {
   };
 
   return (
-    <nav style={{ 
-      padding: '20px 40px', 
-      background: 'rgba(9, 9, 11, 0.8)', 
-      backdropFilter: 'blur(12px)', 
-      borderBottom: '1px solid #27272a',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      position: 'sticky',
-      top: 0,
-      zIndex: 100
-    }}>
+    <nav className="nav-container">
+      {/* Brand Logo */}
       <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff', letterSpacing: '-1px' }}>v26</div>
       
-      <div style={{ display: 'flex', gap: '30px' }}>
-        {navItem('Workspace', '/workspace')}
-        {navItem('Discover', '/fyp')}
-        {navItem('Signals', '/inbox', true)} 
+      {/* 🔒 ONLY show the private navigation tabs if a user is logged in */}
+      {userEmail && (
+        <div className="nav-links">
+          {navItem('Workspace', '/workspace')}
+          {navItem('Discover', '/fyp')}
+          {navItem('Signals', '/inbox', true)} 
+        </div>
+      )}
+
+      {/* Auth Status Banner */}
+      <div style={{ fontSize: '0.75rem', color: '#71717a', textAlign: 'center' }}>
+        {userEmail ? userEmail : (
+          <div style={{ display: 'flex', gap: '15px' }}>
+            <Link href="/login" style={{ color: '#a1a1aa', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.85rem' }}>Login</Link>
+            <Link href="/register" style={{ color: '#6366f1', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.85rem' }}>Get Started</Link>
+          </div>
+        )}
       </div>
 
-      <div style={{ fontSize: '0.75rem', color: '#71717a' }}>{userEmail}</div>
-
+      {/* Pure CSS handling structural mobile rules without breakages */}
       <style jsx global>{`
+        .nav-container {
+          padding: 20px 40px; 
+          background: rgba(9, 9, 11, 0.9); 
+          backdrop-filter: blur(12px); 
+          border-bottom: 1px solid #27272a;
+          display: flex;
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: center;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          gap: 20px;
+        }
+
+        .nav-links {
+          display: flex; 
+          gap: 30px;
+        }
+
         @keyframes pulse {
           0% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.5); opacity: 0.5; }
           100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 📱 Mobile UI Media Queries - Prevents squishing and overlapping */
+        @media (max-width: 600px) {
+          .nav-container {
+            flex-direction: column !important;
+            padding: 15px 20px;
+            gap: 12px;
+          }
+          .nav-links {
+            gap: 20px;
+            justify-content: center;
+            width: 100%;
+          }
         }
       `}</style>
     </nav>

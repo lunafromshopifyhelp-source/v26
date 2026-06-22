@@ -7,7 +7,9 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const projectRoutes = require("./routes/projectRoutes");
-const notificationRoutes = require("./routes/notificationRoutes"); // ⬅️ ADD THIS
+const notificationRoutes = require("./routes/notificationRoutes");
+const postRoutes = require('./routes/postRoutes');
+const missionRoutes = require("./routes/missionRoutes"); // ⬅️ IMPORT MISSIONS ROUTER
 
 const app = express();
 connectDB();
@@ -25,16 +27,12 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);           
 app.use("/api/profiles", profileRoutes);  
 app.use("/api/projects", projectRoutes);  
-app.use("/api/notifications", notificationRoutes); // ⬅️ ADD THIS
+app.use("/api/notifications", notificationRoutes); 
+app.use('/api/posts', postRoutes);
+app.use("/api/missions", missionRoutes); // ⬅️ MAP MISSIONS PREFIX SIZED PERFECTLY FOR THE FRONTEND
 
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-// 1. Import the routes (place near your other route imports)
-const postRoutes = require('./routes/postRoutes');
-
-// 2. Use the routes (place near your other app.use lines)
-app.use('/api/posts', postRoutes);

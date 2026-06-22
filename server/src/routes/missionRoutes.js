@@ -31,4 +31,19 @@ router.get("/my-missions/:email", async (req, res) => {
   }
 });
 
+
+// TOGGLE MISSION STATUS (ACTIVE VS COMPLETED)
+router.put("/update-status/:id", async (req, res) => {
+  try {
+    const { status } = req.body;
+    const updatedMission = await Mission.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+    res.status(200).json(updatedMission);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update mission state." });
+  }
+});
 module.exports = router;

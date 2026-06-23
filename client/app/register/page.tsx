@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 
@@ -10,6 +10,14 @@ export default function Register() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  // 🧼 Clear old session data on mount so you can register a clean new account
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('v26UserEmail');
+      localStorage.removeItem('v26Token');
+    }
+  }, []);
 
   // Step A: Request the Verification Code to Gmail
   const handleSendCode = async (e: React.FormEvent) => {
@@ -58,6 +66,17 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleRedirect = () => {
+    // Points to your backend Google OAuth integration endpoint
+    window.location.href = 'https://v26.onrender.com/api/auth/google';
+  };
+
+  const handlePhonePrompt = () => {
+    const phone = prompt("Enter your phone number for verification:");
+    if (!phone) return;
+    alert(`Sending verification SMS to ${phone}... (Feature expanding soon)`);
   };
 
   return (
@@ -130,14 +149,14 @@ export default function Register() {
         {/* Third-Party Authentication Integrations */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '25px', borderTop: '1px solid #333', paddingTop: '20px' }}>
           <button 
-            onClick={() => alert("Connecting to Google OAuth...")}
+            onClick={handleGoogleRedirect}
             style={{ width: '100%', padding: '12px', backgroundColor: '#FFF', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
           >
             Continue with Google
           </button>
           
           <button 
-            onClick={() => alert("Phone login coming soon...")}
+            onClick={handlePhonePrompt}
             style={{ width: '100%', padding: '12px', backgroundColor: '#2A2A2A', color: '#FFF', border: '1px solid #444', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
           >
             Continue with Phone Number

@@ -6,16 +6,15 @@ import { useRouter } from 'next/navigation';
 export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null); // Added for clear UI feedback
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null); // Reset error on new attempt
+    setError(null);
 
     try {
-      // Connects to your Backend on Port 5000
       const response = await axios.post('https://v26.onrender.com/api/auth/login', formData);
       
       if (response.data.token) {
@@ -26,10 +25,9 @@ export default function Login() {
         localStorage.setItem('v26UserEmail', response.data.user.email); 
         
         alert("Welcome back to v26, Creator!");
-        router.push('/workspace'); // Redirecting to workspace where the Bridge is
+        router.push('/workspace'); 
       }
     } catch (err: any) {
-      // FIX: This captures "Invalid email", "Wrong password", etc. from your backend
       const errorMessage = err.response?.data?.message || "Login failed. Check your connection.";
       setError(errorMessage);
       console.error("Login Error Detail:", err.response?.data);
@@ -39,8 +37,8 @@ export default function Login() {
   };
 
   return (
-    <div style={{ backgroundColor: '#09090b', color: '#FFF', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: '"Inter", sans-serif' }}>
-      <form onSubmit={handleSubmit} style={{ background: '#18181b', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', border: '1px solid #27272a', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+    <div style={{ backgroundColor: '#09090b', color: '#FFF', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: '"Inter", sans-serif', padding: '20px' }}>
+      <form onSubmit={handleSubmit} style={{ background: '#18181b', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', border: '1px solid #27272a', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', boxSizing: 'border-box' }}>
         
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h2 style={{ color: '#6366f1', fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-2px', margin: 0 }}>v26</h2>
@@ -58,7 +56,7 @@ export default function Login() {
           <label style={{ fontSize: '0.75rem', color: '#a1a1aa', display: 'block', marginBottom: '8px', marginLeft: '4px' }}>Identity (Email)</label>
           <input 
             type="email" placeholder="name@domain.com" required 
-            style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #27272a', background: '#09090b', color: '#FFF', outline: 'none', fontSize: '0.9rem' }}
+            style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #27272a', background: '#09090b', color: '#FFF', outline: 'none', fontSize: '0.9rem', boxSizing: 'border-box' }}
             onChange={(e) => setFormData({...formData, email: e.target.value.trim()})} 
           />
         </div>
@@ -67,7 +65,7 @@ export default function Login() {
           <label style={{ fontSize: '0.75rem', color: '#a1a1aa', display: 'block', marginBottom: '8px', marginLeft: '4px' }}>Access Key (Password)</label>
           <input 
             type="password" placeholder="••••••••" required 
-            style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #27272a', background: '#09090b', color: '#FFF', outline: 'none', fontSize: '0.9rem' }}
+            style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #27272a', background: '#09090b', color: '#FFF', outline: 'none', fontSize: '0.9rem', boxSizing: 'border-box' }}
             onChange={(e) => setFormData({...formData, password: e.target.value})}
           />
         </div>
@@ -86,7 +84,8 @@ export default function Login() {
             fontSize: '1rem',
             cursor: loading ? 'not-allowed' : 'pointer',
             boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)',
-            transition: '0.2s'
+            transition: '0.2s',
+            boxSizing: 'border-box'
           }}
         >
           {loading ? "Decrypting..." : "Login to Vision"}

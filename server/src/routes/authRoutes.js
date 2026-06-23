@@ -72,7 +72,7 @@ router.put('/link-partner', async (req, res) => {
   }
 });
 
-// 5. SEND INVITE
+// 5. SEND INVITE (Fixed to dynamically ping the receiving user's notification field)
 router.put('/invite-partner', async (req, res) => {
   try {
     const { myEmail, partnerEmail } = req.body;
@@ -83,21 +83,33 @@ router.put('/invite-partner', async (req, res) => {
       return res.status(404).json({ message: "Requested user does not exist." });
     }
 
-    // Set my status to 'pending' and store who I invited
+    // A. Set your status to 'pending' and store who you invited
     await User.findOneAndUpdate({ email: myEmail }, { partnerEmail, partnerStatus: 'pending' });
+    
+    // B. CRUCIAL FIX: Write your email into the target partner's incomingRequest slot
+    await User.findOneAndUpdate({ email: partnerEmail }, { incomingRequest: myEmail });
+
     res.status(200).json("Invite Sent!");
   } catch (err) {
     res.status(500).json(err);
   }
 });
 
-// 6. ACCEPT INVITE
+// 6. ACCEPT INVITE (Synchronized with frontend 'active' flags and request flushing)
 router.put('/accept-partner', async (req, res) => {
   try {
     const { myEmail, partnerEmail } = req.body;
-    // Both users now get 'accepted' status
-    await User.findOneAndUpdate({ email: myEmail }, { partnerEmail, partnerStatus: 'accepted' });
-    await User.findOneAndUpdate({ email: partnerEmail }, { partnerEmail: myEmail, partnerStatus: 'accepted' });
+    
+    // Both users now get 'active' status on the bridge, and requests are cleared out cleanly
+    await User.findOneAndUpdate(
+      { email: myEmail }, 
+      { partnerEmail, partnerStatus: 'active', incomingRequest: null }
+    );
+    await User.findOneAndUpdate(
+      { email: partnerEmail }, 
+      { partnerEmail: myEmail, partnerStatus: 'active', incomingRequest: null }
+    );
+    
     res.status(200).json("Bridge Activated!");
   } catch (err) {
     res.status(500).json(err);

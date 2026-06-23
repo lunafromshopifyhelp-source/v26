@@ -46,4 +46,18 @@ router.put("/update-status/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to update mission state." });
   }
 });
+
+
+// 🗑️ DELETE AN INDIVIDUAL MISSION FILE
+router.delete("/delete/:id", async (req, res) => {
+  try {
+    const deletedMission = await Mission.findByIdAndDelete(req.params.id);
+    if (!deletedMission) {
+      return res.status(404).json({ error: "Mission goal not found." });
+    }
+    res.status(200).json({ message: "Mission cleared successfully from network." });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete mission from database." });
+  }
+});
 module.exports = router;

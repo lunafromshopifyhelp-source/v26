@@ -2,16 +2,55 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/userModel");
 
-// --- EXISTING SIGNUP ---
+// Temporary in-memory storage for verification codes (Email -> Code mapping)
+const verificationCodes = new Map();
+
+// --- NEW: SEND VERIFICATION CODE ---
+exports.sendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    // Generate a simple 6-digit random code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Save it to memory so the subsequent registration step can check it
+    verificationCodes.set(email, code);
+
+    // 🎯 LOG THE CODE IN YOUR SERVER TERMINAL SO YOU CAN RETRIEVE IT INSTANTLY TO TEST
+    console.log(`\n============== v26 VERIFICATION CODE ==============`);
+    console.log(`Email Target: ${email}`);
+    console.log(`Your 6-Digit Code: ${code}`);
+    console.log(`====================================================\n`);
+
+    // Return success to the frontend
+    res.status(200).json({ message: "Verification code initialized!" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to process verification request" });
+  }
+};
+
+// --- UPDATED SIGNUP (Validates the Code!) ---
 exports.signup = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, code } = req.body;
+    
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
+
+    // Check code matches what we stored in sendVerification
+    const correctCode = verificationCodes.get(email);
+    if (!correctCode || correctCode !== code) {
+      return res.status(400).json({ message: "Invalid or expired verification code." });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new User({ name, email, password: hashedPassword });
     await newUser.save();
+
+    // Clear verification code from memory once used
+    verificationCodes.delete(email);
 
     res.status(201).json({
       message: "User created",
@@ -35,7 +74,7 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign(
       { userId: user._id, email: user.email },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "fallback_secret",
       { expiresIn: "7d" }
     );
 
@@ -50,7 +89,7 @@ exports.login = async (req, res) => {
   }
 };
 
-// --- NEW: GET PROFILE (Needed for Workspace to see partner status) ---
+// --- GET PROFILE ---
 exports.getProfile = async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email });
@@ -61,20 +100,18 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// --- NEW: LINK PARTNER (Step 1 of the Handshake) ---
+// --- LINK PARTNER ---
 exports.linkPartner = async (req, res) => {
   const { myEmail, partnerEmail } = req.body;
   try {
     const partner = await User.findOne({ email: partnerEmail });
     if (!partner) return res.status(404).json({ message: "Partner not found in v26" });
 
-    // 1. Update your record to 'pending'
     await User.findOneAndUpdate(
       { email: myEmail },
       { partnerEmail, partnerStatus: 'pending' }
     );
 
-    // 2. Set the 'incomingRequest' on the partner's record
     await User.findOneAndUpdate(
       { email: partnerEmail },
       { incomingRequest: myEmail }
@@ -86,11 +123,10 @@ exports.linkPartner = async (req, res) => {
   }
 };
 
-// --- NEW: ACCEPT MISSION (Step 2 of the Handshake) ---
+// --- ACCEPT MISSION ---
 exports.acceptMission = async (req, res) => {
   const { myEmail, requesterEmail } = req.body;
   try {
-    // 1. Update your status to 'active' and clear the request
     await User.findOneAndUpdate(
       { email: myEmail },
       { 
@@ -100,7 +136,6 @@ exports.acceptMission = async (req, res) => {
       }
     );
 
-    // 2. Update the requester's status to 'active'
     await User.findOneAndUpdate(
       { email: requesterEmail },
       { partnerStatus: 'active' }

@@ -4,13 +4,15 @@ const router = express.Router();
 // CHANGE THIS LINE BELOW to match your actual file name
 const User = require("../models/userModel"); 
 
-const { signup, login } = require("../controllers/authController");
+// 🎯 Step A: Imported sendVerification right here along with signup and login
+const { signup, login, sendVerification } = require("../controllers/authController");
 
-// 1. Existing Routes
+// 1. Core Authentication Routes
 router.post("/register", signup); 
 router.post("/login", login);
+router.post("/send-verification", sendVerification); // ⬅️ Step B: Wired up the verification endpoint
 
-// 2. New Onboarding Route
+// 2. Onboarding Route
 router.put('/update-profile', async (req, res) => {
   try {
     const { email, talent, vision } = req.body;
@@ -36,11 +38,7 @@ router.put('/update-profile', async (req, res) => {
   }
 });
 
-
-
-
-
-// GET USER PROFILE
+// 3. GET USER PROFILE
 router.get('/profile/:email', async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email });
@@ -54,33 +52,18 @@ router.get('/profile/:email', async (req, res) => {
   }
 });
 
-module.exports = router;
-
-
-// LINK ACCOUNTABILITY PARTNER
+// 4. LINK ACCOUNTABILITY PARTNER (With Complete Existence Validation Loop)
 router.put('/link-partner', async (req, res) => {
   try {
     const { myEmail, partnerEmail } = req.body;
     
-    // Update both users (Optional: you can just update the one seeking accountability)
-    await User.findOneAndUpdate({ email: myEmail }, { partnerEmail: partnerEmail });
-    
-    res.status(200).json({ message: "Partner Linked! They can now see your progress." });
-  } catch (err) {
-    res.status(500).json(err);
-  }
-});
-
-// LINK A PARTNER
-router.put('/link-partner', async (req, res) => {
-  try {
-    const { myEmail, partnerEmail } = req.body;
-    
-    // Check if the partner actually exists in v26
+    // 🎯 STEP 1: Check if the partner actually exists in the v26 database
     const partner = await User.findOne({ email: partnerEmail });
-    if (!partner) return res.status(404).json("Partner not found in v26 system.");
+    if (!partner) {
+      return res.status(404).json({ message: "Partner not found in v26 system." });
+    }
 
-    // Update your profile with their email
+    // STEP 2: Update your profile with their email safely if they exist
     await User.findOneAndUpdate({ email: myEmail }, { partnerEmail: partnerEmail });
     
     res.status(200).json("Bridge established! You are now linked.");
@@ -89,29 +72,44 @@ router.put('/link-partner', async (req, res) => {
   }
 });
 
-
-// 1. SEND INVITE
+// 5. SEND INVITE
 router.put('/invite-partner', async (req, res) => {
-  const { myEmail, partnerEmail } = req.body;
-  // Set my status to 'pending' and store who I invited
-  await User.findOneAndUpdate({ email: myEmail }, { partnerEmail, partnerStatus: 'pending' });
-  // Also alert the partner (we'll look for this on their login)
-  res.status(200).json("Invite Sent!");
+  try {
+    const { myEmail, partnerEmail } = req.body;
+    
+    // Check partner existence prior to passing invite flags
+    const partner = await User.findOne({ email: partnerEmail });
+    if (!partner) {
+      return res.status(404).json({ message: "Requested user does not exist." });
+    }
+
+    // Set my status to 'pending' and store who I invited
+    await User.findOneAndUpdate({ email: myEmail }, { partnerEmail, partnerStatus: 'pending' });
+    res.status(200).json("Invite Sent!");
+  } catch (err) {
+    res.status(500).json(err);
+  }
 });
 
-// 2. ACCEPT INVITE
+// 6. ACCEPT INVITE
 router.put('/accept-partner', async (req, res) => {
-  const { myEmail, partnerEmail } = req.body;
-  // Both users now get 'accepted' status
-  await User.findOneAndUpdate({ email: myEmail }, { partnerEmail, partnerStatus: 'accepted' });
-  await User.findOneAndUpdate({ email: partnerEmail }, { partnerEmail: myEmail, partnerStatus: 'accepted' });
-  res.status(200).json("Bridge Activated!");
+  try {
+    const { myEmail, partnerEmail } = req.body;
+    // Both users now get 'accepted' status
+    await User.findOneAndUpdate({ email: myEmail }, { partnerEmail, partnerStatus: 'accepted' });
+    await User.findOneAndUpdate({ email: partnerEmail }, { partnerEmail: myEmail, partnerStatus: 'accepted' });
+    res.status(200).json("Bridge Activated!");
+  } catch (err) {
+    res.status(500).json(err);
+  }
 });
 
+// 7. DISCONNECT PARTNER
 router.put('/disconnect-partner', async (req, res) => {
   const { myEmail } = req.body;
   try {
     const user = await User.findOne({ email: myEmail });
+    if (!user) return res.status(404).send("User not found");
     const partnerEmail = user.partnerEmail;
 
     // Reset both users
@@ -130,3 +128,6 @@ router.put('/disconnect-partner', async (req, res) => {
     res.status(500).send("Error disconnecting partner");
   }
 });
+
+// 🎯 ALWAYS PLACE THIS AT THE VERY BOTTOM OF THE FILE
+module.exports = router;

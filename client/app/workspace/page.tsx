@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useRouter } from 'next/navigation';
 import VaultDepositModal from '@/components/VaultDepositModal';
 
 interface UserProfile {
@@ -33,6 +34,7 @@ interface MissionItem {
 export default function Workspace() {
   const [selectedTalent, setSelectedTalent] = useState('All');
   const [projects, setProjects] = useState<any[]>([]);
+  const router = useRouter();
   
   // Dynamic Modal UI States
   const [isDepositOpen, setIsDepositOpen] = useState(false);
@@ -52,6 +54,7 @@ export default function Workspace() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]); 
   const [broadcastText, setBroadcastText] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'partner' | 'public'>('partner');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Fetch all custom missions from the database
   const fetchMissions = async () => {
@@ -87,9 +90,19 @@ export default function Workspace() {
   };
 
   useEffect(() => {
+    const email = localStorage.getItem('v26UserEmail');
+    if (email) {
+      setIsLoggedIn(true);
+    }
     fetchVaultAndProfile();
     fetchMissions();
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('v26UserEmail');
+    localStorage.removeItem('v26Token');
+    router.push('/login');
+  };
 
   // Open Portal with Configured Transmission Context
   const triggerVaultDeposit = (status: 'active' | 'manifested') => {
@@ -108,9 +121,22 @@ export default function Workspace() {
       });
       setNewMission(""); 
       alert("Vision Manifested.");
-      fetchMissions(); // Refresh list instantly!
+      fetchMissions(); 
     } catch (err) {
       console.error("Signal lost during initialization.");
+    }
+  };
+
+  // 🗑️ DELETE AN INDIVIDUAL MISSION GOAL
+  const handleDeleteMission = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); 
+    if (!window.confirm("Delete this goal permanently?")) return;
+    try {
+      await axios.delete(`https://v26.onrender.com/api/missions/delete/${id}`);
+      setMissionsList(prev => prev.filter(m => m._id !== id));
+    } catch (err) {
+      console.error("Failed to delete mission:", err);
+      alert("Failed to delete goal.");
     }
   };
 
@@ -211,8 +237,23 @@ export default function Workspace() {
   return (
     <div className="workspace-main-container">
       
+      {/* 🧭 RESPONSIVE CONDITIONAL NAVBAR HEADER */}
+      <header style={{ position: 'absolute', top: 0, left: 0, width: '100%', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#09090b', borderBottom: '1px solid #18181b', boxSizing: 'border-box', zIndex: 10 }}>
+        <h1 style={{ color: '#fff', fontSize: '1.2rem', fontWeight: '900', margin: 0 }}>v26</h1>
+        <nav style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          {isLoggedIn ? (
+            <button onClick={handleLogout} style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Logout</button>
+          ) : (
+            <>
+              <span onClick={() => router.push('/login')} style={{ color: '#a1a1aa', cursor: 'pointer', fontSize: '0.85rem' }}>Login</span>
+              <button onClick={() => router.push('/register')} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>Get Started</button>
+            </>
+          )}
+        </nav>
+      </header>
+
       {/* LEFT: COMMAND CENTER */}
-      <section className="left-command-panel">
+      <section className="left-command-panel" style={{ marginTop: '80px' }}>
         <h2 style={{ fontSize: '1.4rem', fontWeight: '900', marginBottom: '25px', color: '#6366f1' }}>Command Center</h2>
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '35px', background: '#18181b', padding: '15px', borderRadius: '15px', border: '1px solid #27272a' }}>
@@ -273,9 +314,12 @@ export default function Workspace() {
             <p style={{ color: '#71717a', fontSize: '0.8rem', textAlign: 'center', marginTop: '10px' }}>No visions initialized for this timeframe yet.</p>
           ) : (
             missionsList.filter(item => item.timeframe === activeTab).map((item) => (
-              <div key={item._id} onClick={() => togglePlanStatus(item._id, item.status)} style={{ padding: '12px', background: item.status === 'completed' ? 'rgba(99, 102, 241, 0.03)' : '#18181b', borderRadius: '10px', border: '1px solid', borderColor: item.status === 'completed' ? '#6366f1' : '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '18px', height: '18px', border: '2px solid #6366f1', borderRadius: '4px', backgroundColor: item.status === 'completed' ? '#6366f1' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>{item.status === 'completed' && "✓"}</div>
-                <span style={{ fontSize: '0.9rem', color: item.status === 'completed' ? '#71717a' : '#fff' }}>{item.title}</span>
+              <div key={item._id} onClick={() => togglePlanStatus(item._id, item.status)} style={{ padding: '12px', background: item.status === 'completed' ? 'rgba(99, 102, 241, 0.03)' : '#18181b', borderRadius: '10px', border: '1px solid', borderColor: item.status === 'completed' ? '#6366f1' : '#27272a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '18px', height: '18px', border: '2px solid #6366f1', borderRadius: '4px', backgroundColor: item.status === 'completed' ? '#6366f1' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>{item.status === 'completed' && "✓"}</div>
+                  <span style={{ fontSize: '0.9rem', color: item.status === 'completed' ? '#71717a' : '#fff' }}>{item.title}</span>
+                </div>
+                <button onClick={(e) => handleDeleteMission(item._id, e)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.95rem', padding: '4px' }}>🗑️</button>
               </div>
             ))
           )}
@@ -283,7 +327,7 @@ export default function Workspace() {
       </section>
 
       {/* RIGHT: THE SOUL & THE BRIDGE */}
-      <section style={{ flexGrow: 1, padding: '40px', overflowY: 'auto' }}>
+      <section style={{ flexGrow: 1, padding: '40px', marginTop: '80px', overflowY: 'auto' }}>
         
         {/* MULTIMEDIA BROADCAST */}
         <div style={{ marginBottom: '30px', padding: '25px', background: 'linear-gradient(145deg, #1e1b4b, #09090b)', borderRadius: '24px', border: '1px solid #312e81' }}>
@@ -377,8 +421,6 @@ export default function Workspace() {
           </div>
 
           <div className="vault-sections-grid">
-            
-            {/* SECTION A: ACTIVE FREQUENCIES */}
             <div style={{ background: '#09090b', padding: '20px', borderRadius: '15px', border: '1px solid #27272a' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
                 <h4 style={{ color: '#a5b4fc', fontSize: '0.8rem', fontWeight: 'bold' }}>📡 Active Frequencies</h4>
@@ -391,16 +433,10 @@ export default function Workspace() {
                     <span style={{ color: '#71717a', fontSize: '0.6rem' }}>Modified: {new Date(proj.updatedAt).toLocaleDateString()}</span>
                   </div>
                 ))}
-                <button 
-                  onClick={() => triggerVaultDeposit('active')} 
-                  style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px dashed #3f3f46', color: '#a1a1aa', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer' }}
-                >
-                  + Deposit Unfinished Work
-                </button>
+                <button onClick={() => triggerVaultDeposit('active')} style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px dashed #3f3f46', color: '#a1a1aa', borderRadius: '8px', fontSize: '0.7rem', cursor: 'pointer' }}>+ Deposit Unfinished Work</button>
               </div>
             </div>
 
-            {/* SECTION B: MANIFESTED VISIONS */}
             <div style={{ background: '#09090b', padding: '20px', borderRadius: '15px', border: '1px solid #27272a' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
                 <h4 style={{ color: '#fbbf24', fontSize: '0.8rem', fontWeight: 'bold' }}>💎 Manifested Visions</h4>
@@ -413,12 +449,7 @@ export default function Workspace() {
                     <span style={{ color: '#71717a', fontSize: '0.6rem' }}>Manifested: {new Date(proj.updatedAt).toLocaleDateString()}</span>
                   </div>
                 ))}
-                <button 
-                  onClick={() => triggerVaultDeposit('manifested')} 
-                  style={{ width: '100%', padding: '10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid #fbbf24', color: '#fbbf24', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  Archive Finished Project
-                </button>
+                <button onClick={() => triggerVaultDeposit('manifested')} style={{ width: '100%', padding: '10px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid #fbbf24', color: '#fbbf24', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>Archive Finished Project</button>
               </div>
             </div>
           </div>
@@ -431,51 +462,16 @@ export default function Workspace() {
         </div>
       </section>
 
-      {/* DYNAMIC DRAG AND DROP MODAL INJECTION */}
-      {isDepositOpen && (
-        <VaultDepositModal 
-          onClose={() => setIsDepositOpen(false)} 
-          onSuccess={fetchVaultAndProfile} 
-        />
-      )}
+      {isDepositOpen && <VaultDepositModal onClose={() => setIsDepositOpen(false)} onSuccess={fetchVaultAndProfile} />}
 
-      {/* Responsive Structural Media Rules */}
       <style jsx global>{`
-        .workspace-main-container {
-          background-color: #09090b; 
-          color: #fff; 
-          min-height: 100vh; 
-          display: flex; 
-          flex-direction: row;
-          font-family: "Inter", sans-serif;
-        }
-
-        .left-command-panel {
-          width: 35%; 
-          border-right: 1px solid #27272a; 
-          padding: 30px; 
-          overflow-y: auto;
-        }
-
-        .vault-sections-grid {
-          display: grid; 
-          grid-template-columns: 1fr 1fr; 
-          gap: 20px;
-        }
-
+        .workspace-main-container { background-color: #09090b; color: #fff; min-height: 100vh; display: flex; flex-direction: row; font-family: "Inter", sans-serif; }
+        .left-command-panel { width: 35%; border-right: 1px solid #27272a; padding: 30px; overflow-y: auto; }
+        .vault-sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         @media (max-width: 1024px) {
-          .workspace-main-container {
-            flex-direction: column !important;
-          }
-          .left-command-panel {
-            width: 100% !important;
-            border-right: none !important;
-            border-bottom: 1px solid #27272a;
-            box-sizing: border-box;
-          }
-          .vault-sections-grid {
-            grid-template-columns: 1fr !important;
-          }
+          .workspace-main-container { flex-direction: column !important; }
+          .left-command-panel { width: 100% !important; border-right: none !important; border-bottom: 1px solid #27272a; box-sizing: border-box; }
+          .vault-sections-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>

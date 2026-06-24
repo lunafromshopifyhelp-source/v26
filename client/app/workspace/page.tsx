@@ -357,7 +357,8 @@ export default function WorkspaceMasterConsole() {
       </div>
 
       {/* 📱 NATIVE APP FIXED BLUR BOTTOM NAVIGATION BAR */}
-      <footer className="native-app-bottom-bar">
+      {/* 📱 NATIVE FOUR-COLUMN APP BAR FIXED NAV BLUR FOOTER */}
+      <footer className="native-app-bottom-bar four-column-grid">
         <button onClick={() => setActiveNavTab('workspace')} className={`nav-icon-tab ${activeNavTab === 'workspace' ? 'tab-active' : ''}`}>
           <span className="tab-emoji">制造</span> <span className="tab-label-text">Workspace</span>
         </button>
@@ -365,10 +366,52 @@ export default function WorkspaceMasterConsole() {
           <span className="tab-emoji" style={{ position: 'relative' }}>连 {userProfile?.incomingRequest && <span className="notification-ping-dot" />}</span> 
           <span className="tab-label-text">Signals</span>
         </button>
-        <button onClick={() => setActiveNavTab('discover')} className={`nav-icon-tab ${activeNavTab === 'discover' ? 'tab-active' : ''}`}>
+        <button onClick={() => router.push('/discover')} className="nav-icon-tab">
           <span className="tab-emoji">界</span> <span className="tab-label-text">Discover</span>
         </button>
+        <button onClick={() => router.push('/profile')} className="nav-icon-tab">
+          <span className="tab-emoji">己</span> <span className="tab-label-text">Profile</span>
+        </button>
       </footer>
+
+      <style jsx global>{`
+        /* ... keep your existing style definitions ... */
+        
+        .native-app-bottom-bar { 
+          position: fixed; 
+          bottom: 0; 
+          left: 0; 
+          width: 100%; 
+          height: 65px; 
+          background: rgba(11, 11, 13, 0.8); 
+          backdrop-filter: blur(24px); 
+          -webkit-backdrop-filter: blur(24px);
+          border-top: 1px solid #18181b; 
+          display: grid; 
+          align-items: center; 
+          z-index: 1000; 
+        }
+        .four-column-grid { 
+          grid-template-columns: repeat(4, 1fr) !important; 
+        }
+        .nav-icon-tab { 
+          background: transparent; 
+          border: none; 
+          color: #52525b; 
+          display: flex; 
+          flex-direction: column; 
+          align-items: center; 
+          gap: 4px; 
+          cursor: pointer; 
+          height: 100%; 
+          justify-content: center; 
+          transition: color 0.2s ease;
+        }
+        .tab-emoji { font-size: 0.95rem; font-weight: 800; }
+        .tab-label-text { font-size: 0.55rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tab-active { color: #fff !important; }
+        .notification-ping-dot { position: absolute; top: 1px; right: -5px; width: 5px; height: 5px; background: #6366f1; border-radius: 50%; box-shadow: 0 0 6px #6366f1; }
+      `}</style>
 
       <style jsx global>{`
         .workspace-main-container { background-color: #09090b; color: #fafafa; height: 100vh; display: flex; flex-direction: column; position: relative; overflow: hidden; }

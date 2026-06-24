@@ -1,5 +1,4 @@
 'use client';
-
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
@@ -63,7 +62,7 @@ export default function VaultDepositModal({ onClose, onSuccess }: { onClose: () 
     formData.append('file', selectedFile);
     formData.append('creatorEmail', localStorage.getItem('v26UserEmail') || 'system-fallback@v26.io'); 
 
-    try {
+  try {
       const response = await axios.post('https://v26.onrender.com/api/projects/deposit', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
@@ -73,71 +72,64 @@ export default function VaultDepositModal({ onClose, onSuccess }: { onClose: () 
 
       setFeedback({ type: 'secured', message: response.data.message });
       onSuccess(); 
-      setTimeout(onClose, 2000); 
+      setTimeout(onClose, 1500); 
     } catch (err: any) {
-      console.error('Vault Transmission Failed:', err.response?.data?.message || err.message);
-      setFeedback({ type: 'failed', message: 'Vault connection interrupted: ' + (err.response?.data?.message || err.message) });
+      setFeedback({ type: 'failed', message: err.response?.data?.message || 'Vault connection interrupted.' });
     }
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={onClose}>
-      <div style={{ width: '560px', background: '#09090b', borderRadius: '30px', border: '1px solid #1c1c1f', padding: '40px', position: 'relative', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-window" onClick={(e) => e.stopPropagation()}>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px' }}>
           <div>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>Deposit Manifestation</h2>
-            <p style={{ fontSize: '0.8rem', color: '#71717a' }}>Secure your work-in-progress or finished talent assets in the Vault.</p>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#fff', margin: '0 0 4px 0', letterSpacing: '-0.5px' }}>Deposit Manifestation</h2>
+            <p style={{ fontSize: '0.8rem', color: '#71717a', margin: 0 }}>Secure your talent assets in the protected v26 vault systems.</p>
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#3f3f46', fontSize: '1.4rem', cursor: 'pointer' }}>&times;</button>
+          <button onClick={onClose} className="close-x-btn">&times;</button>
         </div>
 
         <div 
           onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          style={{ 
-            width: '100%', height: '160px', borderRadius: '20px', border: '2px dashed #1c1c1f', 
-            borderColor: dragActive ? '#6366f1' : selectedFile ? '#27272a' : '#1c1c1f',
-            background: dragActive ? 'rgba(99,102,241,0.05)' : selectedFile ? '#141416' : '#0c0c0e',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px',
-            marginBottom: '24px', cursor: 'pointer'
-          }}
+          className={`dropzone-box ${dragActive ? 'dz-active' : ''} ${selectedFile ? 'dz-filled' : ''}`}
         >
           <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={(e) => e.target.files && validateFile(e.target.files[0])} />
           
           {selectedFile ? (
             <div style={{ textAlign: 'center', padding: '0 20px' }}>
-              <p style={{ fontSize: '1.5rem', marginBottom: '6px' }}>📦</p>
-              <p style={{ fontSize: '0.8rem', color: '#e4e4e7', fontWeight: '600', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{selectedFile.name}</p>
-              <p style={{ fontSize: '0.7rem', color: '#52525b' }}>{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+              <p style={{ fontSize: '1.3rem', margin: '0 0 8px 0' }}>📦</p>
+              <p style={{ fontSize: '0.8rem', color: '#fff', fontWeight: '600', margin: '0 0 2px 0', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFile.name}</p>
+              <p style={{ fontSize: '0.7rem', color: '#71717a', margin: 0 }}>{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
             </div>
           ) : (
-            <>
-              <div style={{ fontSize: '1.8rem', opacity: 0.4 }}>📦</div>
-              <p style={{ fontSize: '0.85rem', color: '#71717a', textAlign: 'center' }}>
-                <span style={{ color: '#fff', fontWeight: '600' }}>Drop dynamic project media</span> or click<br/>
-                <span style={{ fontSize: '0.7rem' }}>(Max 100MB • Video, Images, Audio, Documents)</span>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '8px', opacity: 0.6 }}>📂</div>
+              <p style={{ fontSize: '0.8rem', color: '#a1a1aa', margin: 0, lineHeight: '1.4' }}>
+                <span style={{ color: '#fff', fontWeight: '600' }}>Drop file asset here</span> or click to browse<br/>
+                <span style={{ fontSize: '0.65rem', color: '#52525b' }}>Maximum asset load limit: 100MB</span>
               </p>
-            </>
+            </div>
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
-          <input type="text" placeholder="Title of Manifestation" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: '100%', background: '#141416', border: '1px solid #1c1c1f', borderRadius: '12px', padding: '12px 16px', fontSize: '0.85rem', color: '#fff', outline: 'none' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '28px' }}>
+          <input type="text" placeholder="Title of Manifestation" value={title} onChange={(e) => setTitle(e.target.value)} className="modal-input-field" />
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Talent Sphere</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: '100%', background: '#141416', border: '1px solid #1c1c1f', borderRadius: '12px', padding: '12px 16px', fontSize: '0.85rem', color: '#fff', outline: 'none', cursor: 'pointer' }}>
+              <label className="input-mini-label">Talent Sphere</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="modal-select-menu">
                 {talentCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
             
             <div>
-              <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Transmission State</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: '100%', background: '#141416', border: '1px solid #1c1c1f', borderRadius: '12px', padding: '12px 16px', fontSize: '0.85rem', color: '#fff', outline: 'none', cursor: 'pointer' }}>
-                <option value="active">📡 Active (WIP)</option>
-                <option value="manifested">💎 Manifested (Finished)</option>
+              <label className="input-mini-label">Transmission State</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} className="modal-select-menu">
+                <option value="active">Active (WIP)</option>
+                <option value="manifested">Manifested (Complete)</option>
               </select>
             </div>
           </div>
@@ -145,10 +137,10 @@ export default function VaultDepositModal({ onClose, onSuccess }: { onClose: () 
 
         <div>
           {feedback.type !== 'idle' && (
-            <div style={{ fontSize: '0.75rem', padding: '10px 14px', borderRadius: '10px', marginBottom: '16px', color: '#fff', background: feedback.type === 'transmitting' ? '#141416' : feedback.type === 'secured' ? '#064e3b' : '#7f1d1d', border: `1px solid ${feedback.type === 'transmitting' ? '#1c1c1f' : feedback.type === 'secured' ? '#10b981' : '#ef4444'}` }}>
+            <div className={`feedback-banner fb-${feedback.type}`}>
               {feedback.type === 'transmitting' && (
-                <div style={{ width: '100%', height: '3px', background: '#27272a', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px' }}>
-                  <div style={{ width: `${progress}%`, height: '100%', background: '#6366f1', transition: 'width 0.1s' }} />
+                <div className="progress-bar-track">
+                  <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
                 </div>
               )}
               {feedback.message}
@@ -158,13 +150,149 @@ export default function VaultDepositModal({ onClose, onSuccess }: { onClose: () 
           <button 
             onClick={executeTransmission}
             disabled={feedback.type === 'transmitting' || feedback.type === 'secured'}
-            style={{ width: '100%', padding: '14px', background: '#fff', color: '#000', border: 'none', borderRadius: '12px', fontSize: '0.9rem', fontWeight: '700', cursor: 'pointer' }}
+            className="modal-submit-btn"
           >
-            {feedback.type === 'transmitting' ? `Manifesting [ ${progress}% ]...` : 'Transmit to Vault'}
+            {feedback.type === 'transmitting' ? `Uploading [ ${progress}% ]` : 'Transmit to Vault'}
           </button>
         </div>
 
       </div>
+
+      <style jsx global>{`
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(4, 4, 5, 0.8);
+          backdrop-filter: blur(16px);
+          zIndex: 99999;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 20px;
+        }
+
+        .modal-window {
+          width: 100%;
+          max-width: 480px;
+          background: #09090b;
+          border: 1px solid #18181b;
+          border-radius: 24px;
+          padding: 32px;
+          box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+
+        .close-x-btn {
+          background: transparent;
+          border: none;
+          color: #52525b;
+          font-size: 1.5rem;
+          cursor: pointer;
+          line-height: 1;
+          transition: color 0.2s;
+        }
+        .close-x-btn:hover { color: #fff; }
+
+        .dropzone-box {
+          width: 100%;
+          height: 140px;
+          border-radius: 16px;
+          border: 1px dashed #27272a;
+          background: #09090b;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 20px;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .dropzone-box:hover {
+          border-color: #52525b;
+          background: #141416;
+        }
+        .dz-active {
+          border-color: #6366f1 !important;
+          background: rgba(99, 102, 241, 0.02) !important;
+        }
+        .dz-filled {
+          border-style: solid;
+          border-color: #22c55e;
+          background: rgba(34, 197, 94, 0.01);
+        }
+
+        .modal-input-field {
+          width: 100%;
+          background: #141416;
+          border: 1px solid #18181b;
+          border-radius: 12px;
+          padding: 12px 14px;
+          font-size: 0.85rem;
+          color: #fff;
+          outline: none;
+          box-sizing: border-box;
+          transition: border-color 0.2s;
+        }
+        .modal-input-field:focus { border-color: #27272a; }
+
+        .input-mini-label {
+          font-size: 0.6rem;
+          color: #71717a;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 6px;
+          display: block;
+        }
+
+        .modal-select-menu {
+          width: 100%;
+          background: #141416;
+          border: 1px solid #18181b;
+          border-radius: 12px;
+          padding: 12px 14px;
+          font-size: 0.85rem;
+          color: #fff;
+          outline: none;
+          cursor: pointer;
+          box-sizing: border-box;
+        }
+
+        .feedback-banner {
+          font-size: 0.75rem;
+          padding: 12px;
+          border-radius: 10px;
+          margin-bottom: 16px;
+          color: #fff;
+        }
+        .fb-transmitting { background: #141416; border: 1px solid #18181b; }
+        .fb-secured { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2); color: #4ade80; }
+        .fb-failed { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; }
+
+        .progress-bar-track { width: 100%; height: 2px; background: #27272a; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+        .progress-bar-fill { height: 100%; background: #6366f1; transition: width 0.1s linear; }
+
+        .modal-submit-btn {
+          width: 100%;
+          padding: 14px;
+          background: #fff;
+          color: #000;
+          border: none;
+          border-radius: 12px;
+          font-size: 0.85rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .modal-submit-btn:hover {
+          background: #e4e4e7;
+          transform: scale(0.99);
+        }
+        .modal-submit-btn:disabled {
+          background: #18181b;
+          color: #52525b;
+          cursor: not-allowed;
+          transform: none;
+        }
+      `}</style>
     </div>
   );
 }

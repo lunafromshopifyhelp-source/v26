@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Enforce a high-end, deep monochromatic dark architecture by default */
+  --background: #09090b;
+  --foreground: #fafafa;
+  
+  /* System Brand Highlights */
+  --accent: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.15);
+  --border-muted: #18181b;
+  --border-active: #27272a;
+  --card-bg: #141416;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-card: var(--card-bg);
+  --font-sans: var(--font-geist-sans), "Inter", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
+/* Global Elements Reset */
+html, body {
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Custom Smooth Premium Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-active);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Premium Global Micro-Interactions & Animation Classes */
+.tap-shake {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tap-shake:active {
+  transform: scale(0.97);
+}
+
+.input-glow-focus {
+  transition: all 0.2s ease;
+}
+.input-glow-focus:focus {
+  border-color: #3f3f46 !important;
+  background-color: #141416 !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.03);
+}
+
+/* Prevent text highlighting during fast tab switching */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
 }

@@ -2,7 +2,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "../components/Navbar"; 
-import { usePathname } from "next/navigation"; // 🎯 Import the path sniffer
+import { usePathname } from "next/navigation";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,8 +21,9 @@ export default function RootLayout({
 }>) {
   const pathname = usePathname();
 
-  // 🎯 HIDE CHECK: If the user is on the workspace page, we DO NOT show the old top header navbar
-  const isWorkspace = pathname?.startsWith('/workspace');
+  // Hide the global top navbar across all internal console and app views
+  const appRoutes = ['/workspace', '/discover', '/profile', '/signals', '/dashboard', '/inbox'];
+  const isAppView = appRoutes.some(route => pathname?.startsWith(route));
 
   return (
     <html lang="en">
@@ -30,10 +31,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{ margin: 0, padding: 0, backgroundColor: '#09090b', color: '#fff' }}
       >
-        {/* Only render the top navbar if we are NOT inside the mobile app view */}
-        {!isWorkspace && <Navbar />} 
+        {/* Only render the top navbar on public landing, auth, or onboarding pages */}
+        {!isAppView && <Navbar />} 
 
-        {/* Displays your isolated views cleanly */}
         {children} 
       </body>
     </html>

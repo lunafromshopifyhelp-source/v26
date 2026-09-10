@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import BottomNav from '@/components/BottomNav';
 
 interface UserProfile {
   email?: string;
@@ -67,7 +68,12 @@ export default function StandaloneProfilePage() {
           <div style={{ padding: '20px', background: '#0e0e11', border: '1px solid #18181b', borderRadius: '24px' }}>
             <span className="section-mini-tag" style={{ color: '#818cf8' }}>Modify Visual Identity</span>
             <p style={{ fontSize: '0.75rem', color: '#71717a', margin: '0 0 16px 0', lineHeight: '1.4' }}>Update your visible identifier broadcast token displayed across global streams.</p>
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Enter display alias..." className="premium-text-input" />
+            <input 
+              value={newName} 
+              onChange={(e) => setNewName(e.target.value)} 
+              placeholder="Enter display alias..." 
+              className="premium-text-input" 
+            />
             <button onClick={handleUpdateIdentity} disabled={updatingProfile} className="premium-action-btn" style={{ width: '100%' }}>
               {updatingProfile ? 'Saving Configuration...' : 'Update Identity'}
             </button>
@@ -95,21 +101,8 @@ export default function StandaloneProfilePage() {
         </div>
       </div>
 
-      {/* 📱 FIXED 4-TAB NAVIGATION APP FOOTER BAR */}
-      <footer className="native-app-bottom-bar four-column-grid">
-        <button onClick={() => router.push('/workspace')} className="nav-icon-tab">
-          <span className="tab-emoji">制造</span> <span className="tab-label-text">Workspace</span>
-        </button>
-        <button onClick={() => router.push('/workspace')} className="nav-icon-tab">
-          <span className="tab-emoji">连</span> <span className="tab-label-text">Signals</span>
-        </button>
-        <button onClick={() => router.push('/discover')} className="nav-icon-tab">
-          <span className="tab-emoji">界</span> <span className="tab-label-text">Discover</span>
-        </button>
-        <button onClick={() => router.push('/profile')} className="nav-icon-tab tab-active">
-          <span className="tab-emoji">己</span> <span className="tab-label-text">Profile</span>
-        </button>
-      </footer>
+      {/* SINGLE UNIFIED SOURCE OF TRUTH BOTTOM NAV */}
+      <BottomNav />
 
       <style jsx global>{`
         .workspace-main-container { background-color: #09090b; color: #fafafa; height: 100vh; display: flex; flex-direction: column; position: relative; overflow: hidden; }
@@ -125,13 +118,6 @@ export default function StandaloneProfilePage() {
 
         .logout-trigger-btn { width: 100%; padding: 14px; background: transparent; border: 1px solid #18181b; color: #f87171; border-radius: 12px; font-weight: 700; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
         .logout-trigger-btn:hover { background: rgba(239, 68, 68, 0.02); border-color: #f87171; }
-
-        .native-app-bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 65px; background: rgba(11, 11, 13, 0.8); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-top: 1px solid #18181b; display: grid; align-items: center; z-index: 1000; }
-        .four-column-grid { grid-template-columns: repeat(4, 1fr) !important; }
-        .nav-icon-tab { background: transparent; border: none; color: #52525b; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; height: 100%; justify-content: center; }
-        .tab-emoji { font-size: 0.95rem; font-weight: 800; }
-        .tab-label-text { font-size: 0.55rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-        .tab-active { color: #fff !important; }
       `}</style>
     </div>
   );

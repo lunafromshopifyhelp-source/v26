@@ -8,7 +8,6 @@ interface CommentItem {
   _id?: string;
   userEmail?: string;
   userName?: string;
-  user?: string;
   text: string;
   createdAt?: string;
 }
@@ -23,44 +22,38 @@ interface BroadcastPost {
   visibility: 'private' | 'partner' | 'public';
   createdAt: string;
   likes?: string[];
-  inspirations?: string[];
   comments?: CommentItem[];
-  discussions?: CommentItem[];
 }
 
-export default function AdvancedMultimediaDiscoverPage() {
+export default function FacebookStyleDiscoverPage() {
   const router = useRouter();
   const [broadcasts, setBroadcasts] = useState<BroadcastPost[]>([]);
   const [activeFilter, setActiveFilter] = useState('All');
   const [loading, setLoading] = useState(true);
-  const [isMounted, setIsMounted] = useState(false);
-  const [incomingAlert, setIncomingAlert] = useState(false);
   
-  // Discussion / Echo Drawer State
-  const [activeDiscussionPostId, setActiveDiscussionPostId] = useState<string | null>(null);
+  // Quick Post Modal State
+  const [quickText, setQuickText] = useState('');
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [publishing, setPublishing] = useState(false);
+
+  // Discussion Drawer State
+  const [activeDiscussionPost, setActiveDiscussionPost] = useState<BroadcastPost | null>(null);
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
 
-  const fetchPublicFeed = async () => {
+  const currentUserEmail = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
+
+  const fetchFeed = async () => {
     try {
-      const email = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
-      if (email) {
-        try {
-          const profileRes = await axios.get(`https://v26.onrender.com/api/auth/profile/${email}`);
-          if (profileRes.data?.incomingRequest) setIncomingAlert(true);
-        } catch (e) {
-          // Continue even if profile check fails
-        }
-      }
-      // Fetches public posts (supports both /public and /public-feed endpoints)
       const res = await axios.get('https://v26.onrender.com/api/posts/public');
       setBroadcasts(res.data);
     } catch (err) {
       try {
-        const fallbackRes = await axios.get('https://v26.onrender.com/api/posts/public-feed');
-        setBroadcasts(fallbackRes.data);
-      } catch (fallbackErr) {
-        console.error("Failed to fetch public feed arrays:", fallbackErr);
+        const fallback = await axios.get('https://v26.onrender.com/api/posts/public-feed');
+        setBroadcasts(fallback.data);
+      } catch (e) {
+        console.error("Feed sync error:", e);
       }
     } finally {
       setLoading(false);
@@ -68,344 +61,463 @@ export default function AdvancedMultimediaDiscoverPage() {
   };
 
   useEffect(() => {
-    fetchPublicFeed();
-    setIsMounted(true);
+    fetchFeed();
   }, []);
 
-  const handleInspire = async (postId: string) => {
-    const email = localStorage.getItem("v26UserEmail"); 
-    if (!email) return alert("Please sign in to interact!");
-
-    // Optimistic UI update
-    setBroadcasts(prev => prev.map(post => {
-      if (post._id !== postId) return post;
-      const currentLikes = post.likes || post.inspirations || [];
-      const alreadyLiked = currentLikes.includes(email);
-      const updatedLikes = alreadyLiked 
-        ? currentLikes.filter(e => e !== email)
-        : [...currentLikes, email];
-      return { ...post, likes: updatedLikes, inspirations: updatedLikes };
-    }));
-
+  const handleCreatePost = async () => {
+    if (!quickText.trim() && selectedFiles.length === 0) return;
+    setPublishing(true);
     try {
-      await axios.post(`https://v26.onrender.com/api/posts/inspire/${postId}`, { email });
+      const postData = {
+        authorEmail: currentUserEmail,
+        authorName: currentUserEmail ? currentUserEmail.split('@')[0] : "Creator",
+        text: quickText.trim(),
+        media: selectedFiles.length > 0 ? selectedFiles.map(f => URL.createObjectURL(f)) : null,
+        visibility: 'public'
+      };
+      const res = await axios.post('https://v26.onrender.com/api/posts/create', postData);
+      setBroadcasts([res.data, ...broadcasts]);
+      setQuickText('');
+      setSelectedFiles([]);
+      setShowPostModal(false);
     } catch (err) {
-      // Revert silently if request fails
-      fetchPublicFeed();
+      alert("Failed to publish post.");
+    } finally {
+      setPublishing(false);
     }
   };
 
-  const handleDiscussSubmit = async (postId: string) => {
-    if (!commentText.trim()) return;
-    const email = localStorage.getItem('v26UserEmail');
-    if (!email) return alert("Please sign in to contribute!");
+  const handleInspire = async (postId: string) => {
+    if (!currentUserEmail) return alert("Please log in to react.");
 
-    setSubmittingComment(true);
-    const userName = email.split('@')[0] || "Creator";
+    setBroadcasts(prev => prev.map(post => {
+      if (post._id !== postId) return post;
+      const currentLikes = post.likes || [];
+      const alreadyLiked = currentLikes.includes(currentUserEmail);
+      const updated = alreadyLiked 
+        ? currentLikes.filter(e => e !== currentUserEmail)
+        : [...currentLikes, currentUserEmail];
+      return { ...post, likes: updated };
+    }));
 
     try {
-      const response = await axios.post(`https://v26.onrender.com/api/posts/echo/${postId}`, { 
-        userEmail: email,
-        userName: userName,
+      await axios.post(`https://v26.onrender.com/api/posts/inspire/${postId}`, { email: currentUserEmail });
+    } catch {
+      fetchFeed();
+    }
+  };
+
+  const handleSendComment = async (postId: string) => {
+    if (!commentText.trim() || !currentUserEmail) return;
+    setSubmittingComment(true);
+    const userName = currentUserEmail.split('@')[0];
+
+    try {
+      const res = await axios.post(`https://v26.onrender.com/api/posts/echo/${postId}`, {
+        userEmail: currentUserEmail,
+        userName,
         text: commentText.trim()
       });
-
-      const updatedComments = response.data.comments || response.data.discussions;
-
-      setBroadcasts(prev => prev.map(post => {
-        if (post._id === postId) {
-          return { ...post, comments: updatedComments, discussions: updatedComments };
-        }
-        return post;
-      }));
+      const updated = res.data.comments;
+      setBroadcasts(prev => prev.map(p => p._id === postId ? { ...p, comments: updated } : p));
+      if (activeDiscussionPost?._id === postId) {
+        setActiveDiscussionPost(prev => prev ? { ...prev, comments: updated } : null);
+      }
       setCommentText('');
     } catch (err) {
-      // Fallback to /discuss if legacy endpoint is being used
-      try {
-        const token = localStorage.getItem("v26Token");
-        const fallbackRes = await axios.post(`https://v26.onrender.com/api/posts/${postId}/discuss`, {
-          text: commentText,
-          userName: userName
-        }, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
-        const updated = fallbackRes.data.discussions || fallbackRes.data.comments;
-        setBroadcasts(prev => prev.map(post => post._id === postId ? { ...post, discussions: updated, comments: updated } : post));
-        setCommentText('');
-      } catch (e) {
-        console.error(e);
-      }
+      console.error(err);
     } finally {
       setSubmittingComment(false);
     }
   };
 
-  const handleShareLink = (postId: string) => {
-    const assetUrl = `${window.location.origin}/discover#${postId}`;
-    navigator.clipboard.writeText(assetUrl).then(() => alert("Broadcast connection link copied!"));
-  };
-
-  // 🎥 MULTIMEDIA ASSET ENGINE (100% UNTOUCHED)
-  const renderMultimediaAsset = (url: string) => {
-    const fullUrl = url.startsWith('http') ? url : `https://v26.onrender.com${url}`;
-    const extension = url.split('.').pop()?.toLowerCase();
-
-    // 🎥 REELS / VIDEO INJECTION PIPELINE
-    if (['mp4', 'webm', 'mov', 'quicktime'].includes(extension || '')) {
-      return (
-        <div className="media-reel-wrapper">
-          <video 
-            src={fullUrl} 
-            controls 
-            loop 
-            playsInline 
-            className="premium-native-video"
-            preload="metadata"
-          />
-        </div>
-      );
-    }
-
-    // 🎵 AUDIO ARCHITECTURE PIPELINE
-    if (['mp3', 'wav', 'ogg', 'aac'].includes(extension || '')) {
-      return (
-        <div className="media-audio-wrapper">
-          <div className="audio-wave-icon">🎵 Audio Broadcast Track</div>
-          <audio src={fullUrl} controls className="premium-native-audio" />
-        </div>
-      );
-    }
-
-    // 🎨 PICTURE PIPELINE
-    return (
-      <div className="media-picture-wrapper">
-        <img src={fullUrl} alt="V26 Broadcast Component" className="premium-native-img" loading="lazy" />
-      </div>
-    );
-  };
-
   const talentCategories = [
-    { id: 'All', label: '🌐 Global Feed' },
-    { id: 'Art', label: '🎨 Visual Arts & Design' },
-    { id: 'Music', label: '🎵 Music Architecture' },
-    { id: 'Development', label: '💻 Systems & Software' },
-    { id: 'Chemistry', label: '🧪 Scientific Research' },
-    { id: 'Business', label: '💼 Strategy & Enterprise' },
-    { id: 'Spiritual', label: '✨ Spiritual Leadership' },
-    { id: 'Athletics', label: '⚡ Physical Sport' }
+    { id: 'All', label: '🌐 All Feed' },
+    { id: 'Art', label: '🎨 Art & Design' },
+    { id: 'Music', label: '🎵 Music' },
+    { id: 'Development', label: '💻 Software' },
+    { id: 'Chemistry', label: '🧪 Science' },
+    { id: 'Business', label: '💼 Strategy' }
   ];
 
-  const currentEmail = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
-
   return (
-    <div className="discover-root-layer">
-      <div className="discover-split-layout">
-        
-        {/* LEFT FILTERS */}
-        <aside className="discover-sidebar">
-          <div style={{ marginBottom: '24px' }}>
-            <h2 className="discover-heading-title">Discover</h2>
-            <p className="discover-heading-sub">Perceive stream modules, cinematic reels, and project updates running along the bridge network.</p>
-          </div>
-          
-          <div className="filter-card-stack">
-            <span className="stack-mini-header">Talent Spheres</span>
-            {talentCategories.map((cat) => (
-              <button 
-                key={cat.id} 
-                onClick={() => setActiveFilter(cat.id)} 
-                className={`filter-link-btn ${activeFilter === cat.id ? 'fl-active' : ''}`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-        </aside>
+    <div className="fb-feed-root">
+      
+      {/* 1. TOP HEADER BAR */}
+      <header className="fb-top-bar">
+        <h1 className="fb-logo">v26</h1>
+        <div className="fb-header-actions">
+          <button className="fb-circle-btn" onClick={() => setShowPostModal(true)}>＋</button>
+          <button className="fb-circle-btn" onClick={() => router.push('/signals')}>🔔</button>
+        </div>
+      </header>
 
-        {/* RIGHT STREAM TIMELINE */}
-        <main className="discover-feed-stream">
+      <div className="fb-main-scrollable">
+
+        {/* 2. "WHAT'S ON YOUR MIND?" QUICK COMPOSER BAR */}
+        <div className="fb-composer-card">
+          <div className="fb-composer-row">
+            <div className="fb-user-avatar">
+              {(currentUserEmail || 'V')[0].toUpperCase()}
+            </div>
+            <button className="fb-fake-input" onClick={() => setShowPostModal(true)}>
+              What's on your mind?
+            </button>
+            <button className="fb-photo-icon-btn" onClick={() => setShowPostModal(true)}>
+              🖼️
+            </button>
+          </div>
+        </div>
+
+        {/* 3. STORIES / REELS HORIZONTAL SCROLLER */}
+        <div className="fb-stories-scroller">
+          
+          {/* Create Story Tile */}
+          <div className="fb-story-card fb-create-story" onClick={() => setShowPostModal(true)}>
+            <div className="fb-create-story-top">
+              <div className="fb-story-avatar-preview">
+                {(currentUserEmail || 'V')[0].toUpperCase()}
+              </div>
+            </div>
+            <div className="fb-create-story-bottom">
+              <div className="fb-plus-badge">＋</div>
+              <span>Create story</span>
+            </div>
+          </div>
+
+          {/* Active Stories from recent broadcasts with media */}
+          {broadcasts.filter(b => b.media && b.media.length > 0).slice(0, 8).map((story, i) => (
+            <div 
+              key={story._id || i} 
+              className="fb-story-card" 
+              onClick={() => {
+                const el = document.getElementById(story._id);
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              <img 
+                src={story.media![0].startsWith('http') ? story.media![0] : `https://v26.onrender.com${story.media![0]}`} 
+                alt="Story" 
+                className="fb-story-media" 
+              />
+              <div className="fb-story-author-ring">
+                {(story.authorName || story.authorEmail)[0].toUpperCase()}
+              </div>
+              <span className="fb-story-author-name">{story.authorName || story.authorEmail.split('@')[0]}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* 4. SLIM HORIZONTAL CATEGORY PILLS */}
+        <div className="fb-pills-row">
+          {talentCategories.map(cat => (
+            <button 
+              key={cat.id} 
+              onClick={() => setActiveFilter(cat.id)}
+              className={`fb-pill ${activeFilter === cat.id ? 'fb-pill-active' : ''}`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 5. FEED POSTS STREAM */}
+        <main className="fb-posts-stream">
           {loading ? (
-            <div className="loading-shimmer-message">Synchronizing media bridge emissions...</div>
+            <div className="fb-empty-state">Synchronizing public feed...</div>
           ) : broadcasts.length === 0 ? (
-            <div className="empty-feed-card">
-              <p style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: '700' }}>No creative content uploaded.</p>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#52525b' }}>Publish reels or snapshots from your home console to launch the grid stream.</p>
+            <div className="fb-empty-state">
+              <p style={{ margin: 0, fontWeight: 700 }}>No vision posts available.</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#71717a' }}>Be the first to share an insight or reel!</p>
             </div>
           ) : (
-            broadcasts.map((post) => {
-              const likesList = post.likes || post.inspirations || [];
-              const commentsList = post.comments || post.discussions || [];
-              const isLiked = currentEmail ? likesList.includes(currentEmail) : false;
+            broadcasts.map(post => {
+              const likes = post.likes || [];
+              const comments = post.comments || [];
+              const isLiked = currentUserEmail ? likes.includes(currentUserEmail) : false;
 
               return (
-                <article key={post._id} id={post._id} className="timeline-broadcast-card">
+                <article key={post._id} id={post._id} className="fb-post-card">
                   
-                  {/* ACCOUNT PROFILE HEADER */}
-                  <div className="post-header">
+                  {/* Post Author Header */}
+                  <div className="fb-post-header">
                     <div 
-                      className="post-avatar" 
+                      className="fb-author-avatar" 
                       onClick={() => router.push(`/profile?user=${encodeURIComponent(post.authorEmail)}`)}
-                      style={{ cursor: 'pointer' }}
                     >
-                      {(post.authorName || post.authorEmail || 'C')[0].toUpperCase()}
+                      {(post.authorName || post.authorEmail)[0].toUpperCase()}
                     </div>
-                    <div>
-                      <h4 
-                        className="post-author-name"
-                        onClick={() => router.push(`/profile?user=${encodeURIComponent(post.authorEmail)}`)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {post.authorName || post.authorEmail.split('@')[0]}
-                      </h4>
-                      <span className="post-timestamp">{isMounted ? new Date(post.createdAt).toLocaleDateString() : '...'}</span>
+                    <div className="fb-post-meta">
+                      <div className="fb-author-name-row">
+                        <span 
+                          className="fb-author-name"
+                          onClick={() => router.push(`/profile?user=${encodeURIComponent(post.authorEmail)}`)}
+                        >
+                          {post.authorName || post.authorEmail.split('@')[0]}
+                        </span>
+                        <span className="fb-verified-badge">✓</span>
+                      </div>
+                      <span className="fb-post-date">{new Date(post.createdAt).toLocaleDateString()} • 🌐</span>
                     </div>
-                    <span className="visibility-badge">{post.visibility}</span>
+                    <button className="fb-post-menu-btn">•••</button>
                   </div>
 
-                  {/* TEXT AREA POST CONTENT */}
-                  {post.text && <p className="post-main-text">{post.text}</p>}
+                  {/* Post Text Body */}
+                  {post.text && <p className="fb-post-text">{post.text}</p>}
 
-                  {/* MULTIMEDIA DISPLAY ENGINE LAYER */}
+                  {/* Media Reel / Full-Width Container */}
                   {post.media && post.media.length > 0 && (
-                    <div className={`multimedia-grid-layout ${post.media.length > 1 ? 'grid-split' : 'grid-solo'}`}>
-                      {post.media.map((assetUrl, index) => (
-                        <div key={index} className="multimedia-container-slot">
-                          {renderMultimediaAsset(assetUrl)}
-                        </div>
-                      ))}
+                    <div className="fb-media-container">
+                      {post.media[0].endsWith('.mp4') || post.media[0].endsWith('.webm') ? (
+                        <video 
+                          src={post.media[0].startsWith('http') ? post.media[0] : `https://v26.onrender.com${post.media[0]}`} 
+                          controls 
+                          playsInline 
+                          className="fb-post-media" 
+                        />
+                      ) : (
+                        <img 
+                          src={post.media[0].startsWith('http') ? post.media[0] : `https://v26.onrender.com${post.media[0]}`} 
+                          alt="Post attachment" 
+                          className="fb-post-media" 
+                          loading="lazy" 
+                        />
+                      )}
                     </div>
                   )}
 
-                  {/* INTERACTION ROW TOOLBAR */}
-                  <div className="post-action-toolbar">
+                  {/* Social Counters Row */}
+                  <div className="fb-counters-row">
+                    <div className="fb-likes-count">
+                      <span className="fb-reaction-icon">⚡</span>
+                      <span>{likes.length}</span>
+                    </div>
+                    <div className="fb-comments-count" onClick={() => setActiveDiscussionPost(post)}>
+                      <span>{comments.length} comments</span>
+                    </div>
+                  </div>
+
+                  {/* Social Action Bar (Like, Comment, Share) */}
+                  <div className="fb-actions-bar">
                     <button 
                       onClick={() => handleInspire(post._id)} 
-                      className={`toolbar-btn inspire-clr ${isLiked ? 'active-like' : ''}`}
+                      className={`fb-action-btn ${isLiked ? 'fb-liked' : ''}`}
                     >
-                      ⚡ <span>{likesList.length > 0 ? likesList.length : 0} Inspire</span>
+                      <span>⚡</span> <span>{isLiked ? 'Inspired' : 'Inspire'}</span>
                     </button>
                     <button 
-                      onClick={() => setActiveDiscussionPostId(activeDiscussionPostId === post._id ? null : post._id)} 
-                      className={`toolbar-btn discuss-clr ${activeDiscussionPostId === post._id ? 'tb-open' : ''}`}
+                      onClick={() => setActiveDiscussionPost(post)} 
+                      className="fb-action-btn"
                     >
-                      💬 <span>{commentsList.length > 0 ? commentsList.length : 0} Echoes</span>
+                      <span>💬</span> <span>Comment</span>
                     </button>
-                    <button onClick={() => handleShareLink(post._id)} className="toolbar-btn share-clr" style={{ marginLeft: 'auto' }}>
-                      🔗 Share Link
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/discover#${post._id}`);
+                        alert("Post link copied!");
+                      }} 
+                      className="fb-action-btn"
+                    >
+                      <span>🔗</span> <span>Share</span>
                     </button>
                   </div>
-
-                  {/* DYNAMIC DISCUSSION / ECHO BOARD DRAWER */}
-                  {activeDiscussionPostId === post._id && (
-                    <div className="discussion-drawer-panel">
-                      <div className="discussion-messages-scroller">
-                        {commentsList.length > 0 ? commentsList.map((disc, idx) => (
-                          <div key={disc._id || idx} className="comment-bubble">
-                            <span className="comment-author">{disc.userName || disc.user || 'Creator'}</span>
-                            <p style={{ margin: 0, color: '#e4e4e7' }}>{disc.text}</p>
-                          </div>
-                        )) : <p style={{ fontSize: '0.8rem', color: '#52525b', margin: 0 }}>Silence implies observation. Drop a perspective below.</p>}
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-                        <input 
-                          value={commentText} 
-                          onChange={(e) => setCommentText(e.target.value)} 
-                          placeholder="Contribute depth..." 
-                          className="comment-input-field" 
-                          onKeyDown={(e) => e.key === 'Enter' && handleDiscussSubmit(post._id)}
-                        />
-                        <button onClick={() => handleDiscussSubmit(post._id)} disabled={submittingComment} className="comment-submit-btn">
-                          {submittingComment ? '...' : 'Send'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </article>
               );
             })
           )}
         </main>
+
       </div>
 
-      {/* 📱 UNIFIED 4-TAB BOTTOM NAVIGATION */}
-      <BottomNav hasNotification={incomingAlert} />
+      {/* CREATE POST MODAL POPUP */}
+      {showPostModal && (
+        <div className="fb-modal-backdrop" onClick={() => setShowPostModal(false)}>
+          <div className="fb-modal-sheet" onClick={e => e.stopPropagation()}>
+            <div className="fb-modal-top">
+              <h3>Create Post</h3>
+              <button className="fb-modal-close" onClick={() => setShowPostModal(false)}>✕</button>
+            </div>
+            
+            <div className="fb-modal-user-row">
+              <div className="fb-author-avatar">{(currentUserEmail || 'V')[0].toUpperCase()}</div>
+              <div>
+                <span className="fb-author-name">{currentUserEmail?.split('@')[0] || 'Creator'}</span>
+                <span className="fb-privacy-pill">🌐 Public</span>
+              </div>
+            </div>
+
+            <textarea 
+              value={quickText} 
+              onChange={e => setQuickText(e.target.value)} 
+              placeholder="What's on your mind?" 
+              className="fb-modal-textarea" 
+              autoFocus 
+            />
+
+            <div className="fb-modal-media-slot">
+              <label className="fb-modal-attach-label">
+                <input 
+                  type="file" 
+                  multiple 
+                  style={{ display: 'none' }} 
+                  onChange={e => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} 
+                />
+                🖼️ <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected` : 'Add Photos / Videos to post'}</span>
+              </label>
+            </div>
+
+            <button 
+              onClick={handleCreatePost} 
+              disabled={publishing || (!quickText.trim() && selectedFiles.length === 0)} 
+              className="fb-modal-submit-btn"
+            >
+              {publishing ? 'Publishing...' : 'Post'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* DISCUSSIONS / COMMENTS DRAWER */}
+      {activeDiscussionPost && (
+        <div className="fb-modal-backdrop" onClick={() => setActiveDiscussionPost(null)}>
+          <div className="fb-comments-drawer" onClick={e => e.stopPropagation()}>
+            <div className="fb-modal-top">
+              <h3>Comments</h3>
+              <button className="fb-modal-close" onClick={() => setActiveDiscussionPost(null)}>✕</button>
+            </div>
+
+            <div className="fb-drawer-comments-scroll">
+              {(activeDiscussionPost.comments || []).length === 0 ? (
+                <div className="fb-empty-comments">Be the first to comment on this vision!</div>
+              ) : (
+                activeDiscussionPost.comments!.map((c, idx) => (
+                  <div key={c._id || idx} className="fb-comment-bubble-row">
+                    <div className="fb-comment-avatar">{(c.userName || 'C')[0].toUpperCase()}</div>
+                    <div className="fb-comment-bubble">
+                      <span className="fb-comment-user">{c.userName}</span>
+                      <p className="fb-comment-text">{c.text}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="fb-comment-input-row">
+              <input 
+                value={commentText} 
+                onChange={e => setCommentText(e.target.value)} 
+                placeholder="Write a comment..." 
+                className="fb-comment-input" 
+                onKeyDown={e => e.key === 'Enter' && handleSendComment(activeDiscussionPost._id)} 
+              />
+              <button 
+                onClick={() => handleSendComment(activeDiscussionPost._id)} 
+                disabled={submittingComment} 
+                className="fb-comment-send"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📱 4-TAB BOTTOM NAVIGATION */}
+      <BottomNav />
 
       <style jsx global>{`
-        /* --- CORE PAGE STYLES --- */
-        .discover-root-layer { background-color: #09090b; min-height: 100vh; color: #fff; padding-bottom: 80px; }
-        .discover-split-layout { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: row; gap: 40px; padding: 40px 20px; }
-        .discover-sidebar { width: 260px; position: sticky; top: 40px; height: fit-content; }
-        .discover-feed-stream { flex: 1; display: flex; flex-direction: column; gap: 24px; }
-
-        .discover-heading-title { font-size: 1.6rem; font-weight: 900; margin: 0 0 6px 0; letter-spacing: -0.5px; background: linear-gradient(to right, #fff, #a1a1aa); -webkit-background-clip: text; -webkit-text-fillColor: transparent; }
-        .discover-heading-sub { color: #71717a; font-size: 0.8rem; line-height: 1.4; margin: 0; }
-
-        /* --- SIDEBAR CLUSTER --- */
-        .filter-card-stack { display: flex; flex-direction: column; gap: 4px; background: #0e0e11; padding: 14px; border-radius: 20px; border: 1px solid #18181b; }
-        .stack-mini-header { font-size: 0.6rem; color: #52525b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; padding-left: 8px; }
+        .fb-feed-root { background-color: #000000; min-height: 100vh; color: #e4e6eb; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
         
-        .filter-link-btn { width: 100%; text-align: left; padding: 10px 14px; border-radius: 10px; font-size: 0.8rem; font-weight: 500; background: transparent; color: #a1a1aa; border: none; cursor: pointer; transition: 0.2s; }
-        .filter-link-btn:hover { color: #fff; background: #141416; }
-        .fl-active { background: rgba(99, 102, 241, 0.08) !important; color: #818cf8 !important; font-weight: 700 !important; }
+        /* Top Facebook-Style Bar */
+        .fb-top-bar { position: sticky; top: 0; background: #000; z-index: 100; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #18191a; }
+        .fb-logo { font-size: 1.5rem; font-weight: 900; color: #2e89ff; margin: 0; letter-spacing: -1px; }
+        .fb-header-actions { display: flex; gap: 8px; }
+        .fb-circle-btn { width: 36px; height: 36px; border-radius: 50%; background: #242526; border: none; color: #e4e6eb; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; }
 
-        /* --- BROADCAST TIMELINE CARDS --- */
-        .timeline-broadcast-card { background: #0e0e11; border: 1px solid #18181b; border-radius: 24px; padding: 24px; display: flex; flex-direction: column; }
-        .post-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; position: relative; }
-        .post-avatar { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, #1c1c21, #27272a); border: 1px solid #27272a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem; color: #fff; transition: transform 0.15s ease; }
-        .post-avatar:hover { transform: scale(1.05); }
-        .post-author-name { font-size: 0.9rem; font-weight: 700; margin: 0 0 2px 0; color: #fafafa; }
-        .post-author-name:hover { text-decoration: underline; }
-        .post-timestamp { font-size: 0.75rem; color: #52525b; display: block; }
-        .visibility-badge { position: absolute; right: 0; top: 6px; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; background: #141416; border: 1px solid #18181b; padding: 3px 8px; border-radius: 6px; color: #71717a; }
-        .post-main-text { font-size: 0.95rem; color: #e4e4e7; line-height: 1.55; margin: 0 0 16px 0; white-space: pre-wrap; }
+        .fb-main-scrollable { max-width: 580px; margin: 0 auto; padding-bottom: 85px; }
 
-        /* --- 🎥 SYSTEM MULTIMEDIA GRID ENGINE SYSTEM --- */
-        .multimedia-grid-layout { display: grid; gap: 12px; margin-bottom: 16px; border-radius: 16px; overflow: hidden; width: 100%; }
-        .grid-solo { grid-template-columns: 1fr; }
-        .grid-split { grid-template-columns: 1fr 1fr; }
-        .multimedia-container-slot { width: 100%; background: #09090b; border: 1px solid #18181b; border-radius: 14px; overflow: hidden; display: flex; justify-content: center; align-items: center; position: relative; }
+        /* Quick Composer Card */
+        .fb-composer-card { background: #0e0e11; padding: 12px 16px; border-bottom: 1px solid #18181b; }
+        .fb-composer-row { display: flex; align-items: center; gap: 12px; }
+        .fb-user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #242526; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; flex-shrink: 0; }
+        .fb-fake-input { flex: 1; background: #18181b; border: 1px solid #27272a; border-radius: 20px; padding: 10px 16px; color: #71717a; text-align: left; font-size: 0.85rem; cursor: pointer; }
+        .fb-photo-icon-btn { background: transparent; border: none; font-size: 1.3rem; cursor: pointer; }
 
-        /* Video / Reel Aspect Lock */
-        .media-reel-wrapper { width: 100%; aspect-ratio: 9 / 16; max-height: 480px; background: #000; display: flex; }
-        .premium-native-video { width: 100%; height: 100%; object-fit: cover; background: #000; outline: none; }
+        /* Stories Scroller */
+        .fb-stories-scroller { display: flex; gap: 8px; padding: 12px 16px; overflow-x: auto; scrollbar-width: none; background: #000; border-bottom: 1px solid #18181b; }
+        .fb-stories-scroller::-webkit-scrollbar { display: none; }
+        .fb-story-card { width: 105px; height: 175px; border-radius: 12px; overflow: hidden; position: relative; flex-shrink: 0; background: #18181b; cursor: pointer; }
+        .fb-story-media { width: 100%; height: 100%; object-fit: cover; }
+        .fb-story-author-ring { position: absolute; top: 8px; left: 8px; width: 32px; height: 32px; border-radius: 50%; border: 3px solid #2e89ff; background: #000; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.75rem; color: #fff; }
+        .fb-story-author-name { position: absolute; bottom: 8px; left: 8px; right: 8px; font-size: 0.7rem; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-        /* Picture Aspect Lock */
-        .media-picture-wrapper { width: 100%; aspect-ratio: 4 / 3; display: flex; }
-        .premium-native-img { width: 100%; height: 100%; object-fit: cover; }
+        /* Create Story Specific */
+        .fb-create-story { display: flex; flex-direction: column; }
+        .fb-create-story-top { flex: 1; background: #1c1c1f; display: flex; align-items: center; justify-content: center; }
+        .fb-story-avatar-preview { width: 44px; height: 44px; border-radius: 50%; background: #27272a; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+        .fb-create-story-bottom { height: 50px; background: #242526; position: relative; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; font-size: 0.7rem; font-weight: 700; color: #fff; }
+        .fb-plus-badge { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%; background: #2e89ff; border: 3px solid #242526; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 900; }
 
-        /* Audio Track Slot */
-        .media-audio-wrapper { width: 100%; padding: 20px; background: #141416; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; }
-        .audio-wave-icon { font-size: 0.8rem; font-weight: 700; color: #a1a1aa; display: flex; align-items: center; gap: 6px; }
-        .premium-native-audio { width: 100%; height: 40px; outline: none; }
+        /* Slim Horizontal Category Pills */
+        .fb-pills-row { display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; background: #0e0e11; border-bottom: 1px solid #18181b; scrollbar-width: none; }
+        .fb-pills-row::-webkit-scrollbar { display: none; }
+        .fb-pill { background: #1c1c1f; border: 1px solid #27272a; border-radius: 18px; padding: 6px 14px; font-size: 0.75rem; font-weight: 600; color: #a1a1aa; white-space: nowrap; cursor: pointer; }
+        .fb-pill-active { background: #2e89ff !important; color: #fff !important; border-color: #2e89ff !important; }
 
-        /* --- ACTIONS ENGINE ROW --- */
-        .post-action-toolbar { display: flex; gap: 20px; border-top: 1px solid #18181b; padding-top: 14px; }
-        .toolbar-btn { background: transparent; border: none; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s; }
-        .toolbar-btn:hover { opacity: 0.7; }
-        .inspire-clr { color: #71717a; }
-        .inspire-clr.active-like { color: #eab308 !important; font-weight: 800; }
-        .discuss-clr { color: #71717a; }
-        .tb-open { color: #6366f1 !important; font-weight: 800; }
-        .share-clr { color: #52525b; }
+        /* Post Cards */
+        .fb-posts-stream { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+        .fb-post-card { background: #0e0e11; border-top: 1px solid #18181b; border-bottom: 1px solid #18181b; padding-top: 12px; }
+        .fb-post-header { display: flex; align-items: center; gap: 10px; padding: 0 16px 8px 16px; }
+        .fb-author-avatar { width: 40px; height: 40px; border-radius: 50%; background: #242526; display: flex; align-items: center; justify-content: center; font-weight: 800; cursor: pointer; }
+        .fb-post-meta { flex: 1; display: flex; flex-direction: column; }
+        .fb-author-name-row { display: flex; align-items: center; gap: 4px; }
+        .fb-author-name { font-size: 0.9rem; font-weight: 700; color: #fff; cursor: pointer; }
+        .fb-author-name:hover { text-decoration: underline; }
+        .fb-verified-badge { font-size: 0.65rem; background: #2e89ff; color: #fff; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; }
+        .fb-post-date { font-size: 0.7rem; color: #71717a; }
+        .fb-post-menu-btn { background: transparent; border: none; color: #71717a; font-size: 1rem; cursor: pointer; }
 
-        /* --- DISCUSSIONS ENGINE LAYERS --- */
-        .discussion-drawer-panel { background: #09090b; border-radius: 16px; padding: 14px; margin-top: 14px; border: 1px solid #18181b; }
-        .discussion-messages-scroller { display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; }
-        .comment-bubble { background: #0e0e11; padding: 10px 12px; border-radius: 12px; font-size: 0.85rem; border: 1px solid #18181b; }
-        .comment-author { font-size: 0.75rem; font-weight: 700; color: #818cf8; display: block; margin-bottom: 2px; }
-        .comment-input-field { flex: 1; background: #0e0e11; border: 1px solid #18181b; border-radius: 8px; padding: 10px; font-size: 0.8rem; color: #fff; outline: none; }
-        .comment-submit-btn { background: #fff; color: #000; font-weight: 700; border: none; border-radius: 8px; padding: 0 14px; font-size: 0.8rem; cursor: pointer; }
+        .fb-post-text { font-size: 0.95rem; line-height: 1.45; color: #e4e6eb; padding: 0 16px; margin: 0 0 10px 0; white-space: pre-wrap; }
+        
+        .fb-media-container { width: 100%; background: #000; }
+        .fb-post-media { width: 100%; max-height: 480px; object-fit: cover; display: block; }
 
-        /* --- UTILITIES --- */
-        .loading-shimmer-message { color: #52525b; font-size: 0.85rem; text-align: center; padding: 40px; font-weight: 600; }
-        .empty-feed-card { background: #0e0e11; border: 1px solid #18181b; border-radius: 24px; padding: 40px; text-align: center; color: #71717a; }
+        .fb-counters-row { display: flex; justify-content: space-between; padding: 10px 16px; font-size: 0.75rem; color: #71717a; border-bottom: 1px solid #18181b; }
+        .fb-likes-count { display: flex; align-items: center; gap: 4px; }
+        .fb-reaction-icon { background: #eab308; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; color: #000; }
+        .fb-comments-count { cursor: pointer; }
 
-        /* --- ADAPTIVE MOBILE LAYOUT --- */
-        @media (max-width: 850px) {
-          .discover-split-layout { flex-direction: column !important; gap: 24px; padding: 20px; }
-          .discover-sidebar { width: 100% !important; position: relative !important; top: 0 !important; }
-          .filter-card-stack { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px; }
-        }
+        .fb-actions-bar { display: grid; grid-template-columns: repeat(3, 1fr); padding: 4px 8px; }
+        .fb-action-btn { background: transparent; border: none; padding: 8px 0; color: #a1a1aa; font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; border-radius: 6px; }
+        .fb-action-btn:hover { background: #18181b; color: #fff; }
+        .fb-liked { color: #facc15 !important; font-weight: 700; }
+
+        /* Modals & Drawers */
+        .fb-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: flex-end; justify-content: center; }
+        .fb-modal-sheet { width: 100%; max-width: 500px; background: #1c1c1f; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; box-sizing: border-box; }
+        .fb-modal-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid #27272a; padding-bottom: 10px; }
+        .fb-modal-top h3 { margin: 0; font-size: 1.1rem; }
+        .fb-modal-close { background: transparent; border: none; color: #a1a1aa; font-size: 1.2rem; cursor: pointer; }
+        .fb-modal-user-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .fb-privacy-pill { font-size: 0.65rem; background: #27272a; padding: 2px 6px; border-radius: 4px; color: #a1a1aa; display: block; margin-top: 2px; }
+        .fb-modal-textarea { width: 100%; height: 120px; background: transparent; border: none; color: #fff; font-size: 1rem; resize: none; outline: none; box-sizing: border-box; }
+        .fb-modal-media-slot { border: 1px dashed #27272a; border-radius: 10px; padding: 12px; text-align: center; margin-bottom: 16px; }
+        .fb-modal-attach-label { cursor: pointer; font-size: 0.8rem; color: #a1a1aa; }
+        .fb-modal-submit-btn { width: 100%; padding: 12px; background: #2e89ff; border: none; border-radius: 10px; color: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer; }
+        .fb-modal-submit-btn:disabled { background: #27272a; color: #52525b; cursor: not-allowed; }
+
+        /* Comments Drawer */
+        .fb-comments-drawer { width: 100%; max-width: 500px; height: 75vh; background: #1c1c1f; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 16px; display: flex; flex-direction: column; box-sizing: border-box; }
+        .fb-drawer-comments-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .fb-comment-bubble-row { display: flex; gap: 8px; }
+        .fb-comment-avatar { width: 32px; height: 32px; border-radius: 50%; background: #27272a; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 800; flex-shrink: 0; }
+        .fb-comment-bubble { background: #242526; border-radius: 14px; padding: 8px 12px; max-width: 85%; }
+        .fb-comment-user { font-size: 0.75rem; font-weight: 700; color: #fff; display: block; margin-bottom: 2px; }
+        .fb-comment-text { font-size: 0.85rem; color: #e4e6eb; margin: 0; }
+        .fb-empty-comments { text-align: center; color: #71717a; font-size: 0.85rem; padding: 40px 0; }
+        .fb-comment-input-row { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid #27272a; }
+        .fb-comment-input { flex: 1; background: #242526; border: none; border-radius: 20px; padding: 10px 14px; color: #fff; font-size: 0.8rem; outline: none; }
+        .fb-comment-send { background: #2e89ff; border: none; border-radius: 20px; padding: 0 16px; color: #fff; font-weight: 700; font-size: 0.8rem; cursor: pointer; }
       `}</style>
     </div>
   );

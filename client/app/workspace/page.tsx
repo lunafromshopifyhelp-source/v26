@@ -1,4 +1,5 @@
 'use client';
+import BottomNav from '@/components/BottomNav';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
@@ -500,19 +501,7 @@ export default function WorkspaceMasterConsole() {
 
       {/* 📱 UNIFIED 4-TAB ZERO-RELOAD FOOTER NAVBAR */}
       <footer className="native-app-bottom-bar four-column-grid">
-        <button onClick={() => setActiveNavTab('workspace')} className={`nav-icon-tab ${activeNavTab === 'workspace' ? 'tab-active' : ''}`}>
-          <span className="tab-emoji">制造</span> <span className="tab-label-text">Workspace</span>
-        </button>
-        <button onClick={() => router.push('/signals')} className="nav-icon-tab">
-          <span className="tab-emoji" style={{ position: 'relative' }}>连 {userProfile?.incomingRequest && <span className="notification-ping-dot" />}</span> 
-          <span className="tab-label-text">Signals</span>
-        </button>
-        <button onClick={() => router.push('/discover')} className="nav-icon-tab">
-          <span className="tab-emoji">界</span> <span className="tab-label-text">Discover</span>
-        </button>
-        <button onClick={() => router.push('/profile')} className="nav-icon-tab">
-          <span className="tab-emoji">己</span> <span className="tab-label-text">Profile</span>
-        </button>
+        <BottomNav hasNotification={!!userProfile?.incomingRequest} />
       </footer>
 
       <style jsx global>{`

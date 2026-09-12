@@ -277,10 +277,17 @@ export default function FacebookStyleDiscoverPage() {
                         />
                       ) : (
                         <img 
-                          src={post.media[0].startsWith('http') ? post.media[0] : `https://v26.onrender.com${post.media[0]}`} 
-                          alt="Post attachment" 
+                          src={
+                            post.media[0].startsWith('http') || post.media[0].startsWith('data:') || post.media[0].startsWith('blob:')
+                              ? post.media[0]
+                              : `https://v26.onrender.com/${post.media[0].replace(/^\/+/, '')}`
+                          } 
+                          alt="" 
                           className="fb-post-media" 
                           loading="lazy" 
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
                         />
                       )}
                     </div>

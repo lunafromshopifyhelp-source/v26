@@ -247,8 +247,8 @@ export default function WorkspaceMasterConsole() {
       await axios.put(`https://v26.onrender.com/api/auth/update-profile`, { email, displayName: newName });
       alert("Identity updated successfully!");
       fetchFeedAndProfile();
-    } catch (err) {
-      alert("Identity modification failed.");
+    } catch (err) { 
+      alert("Identity modification failed."); 
     } finally {
       setUpdatingProfile(false);
     }
@@ -503,14 +503,14 @@ export default function WorkspaceMasterConsole() {
         <button onClick={() => setActiveNavTab('workspace')} className={`nav-icon-tab ${activeNavTab === 'workspace' ? 'tab-active' : ''}`}>
           <span className="tab-emoji">制造</span> <span className="tab-label-text">Workspace</span>
         </button>
-        <button onClick={() => setActiveNavTab('signals')} className={`nav-icon-tab ${activeNavTab === 'signals' ? 'tab-active' : ''}`}>
+        <button onClick={() => router.push('/signals')} className="nav-icon-tab">
           <span className="tab-emoji" style={{ position: 'relative' }}>连 {userProfile?.incomingRequest && <span className="notification-ping-dot" />}</span> 
           <span className="tab-label-text">Signals</span>
         </button>
-        <button onClick={() => setActiveNavTab('discover')} className={`nav-icon-tab ${activeNavTab === 'discover' ? 'tab-active' : ''}`}>
+        <button onClick={() => router.push('/discover')} className="nav-icon-tab">
           <span className="tab-emoji">界</span> <span className="tab-label-text">Discover</span>
         </button>
-        <button onClick={() => setActiveNavTab('profile')} className={`nav-icon-tab ${activeNavTab === 'profile' ? 'tab-active' : ''}`}>
+        <button onClick={() => router.push('/profile')} className="nav-icon-tab">
           <span className="tab-emoji">己</span> <span className="tab-label-text">Profile</span>
         </button>
       </footer>

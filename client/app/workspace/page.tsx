@@ -20,27 +20,28 @@ interface MissionItem {
   status: 'active' | 'completed';
 }
 
+type ScreenMode = 'hub' | 'music' | 'enterprise' | 'systems' | 'visual' | 'directives' | 'mentorship';
+
 export default function MobileWorkspaceDeck() {
   const router = useRouter();
 
-  // Mobile Sub-Page Navigation State
-  const [activeRoom, setActiveRoom] = useState<'directives' | 'studio' | 'alliance'>('directives');
+  // Active Screen / Sub-page State
+  const [activeScreen, setActiveScreen] = useState<ScreenMode>('hub');
 
-  // Core Data States
+  // Backend States
   const [missionsList, setMissionsList] = useState<MissionItem[]>([]);
   const [newMission, setNewMission] = useState("");
   const [timeframe, setTimeframe] = useState("daily");
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
 
-  // Mentorship & Alliance State
+  // Mentorship
   const [partnerEmail, setPartnerEmail] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
-  // Studio Log & Media
+  // Studio Logs
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]); 
   const [broadcastText, setBroadcastText] = useState('');
-  const [workDomain, setWorkDomain] = useState<'Music Architecture' | 'Enterprise' | 'Systems Dev' | 'Visual Design'>('Music Architecture');
   const [visibility, setVisibility] = useState<'private' | 'partner' | 'public'>('partner');
 
   const fetchMissions = async () => {
@@ -49,9 +50,7 @@ export default function MobileWorkspaceDeck() {
     try {
       const res = await axios.get(`https://v26.onrender.com/api/missions/my-missions/${email}`);
       setMissionsList(res.data);
-    } catch (err) { 
-      console.error(err); 
-    }
+    } catch (err) { console.error(err); }
   };
 
   const fetchProfile = async () => {
@@ -60,9 +59,7 @@ export default function MobileWorkspaceDeck() {
     try {
       const res = await axios.get(`https://v26.onrender.com/api/auth/profile/${email}`);
       setUserProfile(res.data);
-    } catch (err) { 
-      console.error(err); 
-    }
+    } catch (err) { console.error(err); }
   };
 
   useEffect(() => {
@@ -70,20 +67,18 @@ export default function MobileWorkspaceDeck() {
     fetchMissions();
   }, []);
 
-  const handleInitialize = async () => {
+  const handleCreateDirective = (prefix: string) => async () => {
     if (!newMission.trim()) return;
     const email = localStorage.getItem('v26UserEmail');
     try {
       await axios.post('https://v26.onrender.com/api/missions/create-mission', {
         creatorEmail: email,
-        title: `[${workDomain}] ${newMission}`,
+        title: `[${prefix}] ${newMission}`,
         timeframe: timeframe
       });
       setNewMission(""); 
       fetchMissions(); 
-    } catch (err) { 
-      console.error(err); 
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleDeleteMission = async (id: string, e: React.MouseEvent) => {
@@ -92,9 +87,7 @@ export default function MobileWorkspaceDeck() {
     try {
       await axios.delete(`https://v26.onrender.com/api/missions/delete/${id}`);
       setMissionsList(prev => prev.filter(m => m._id !== id));
-    } catch (err) { 
-      console.error(err); 
-    }
+    } catch (err) { console.error(err); }
   };
 
   const togglePlanStatus = async (id: string, currentStatus: string) => {
@@ -102,9 +95,7 @@ export default function MobileWorkspaceDeck() {
     setMissionsList(prev => prev.map(m => m._id === id ? { ...m, status: nextStatus } : m));
     try {
       await axios.put(`https://v26.onrender.com/api/missions/update-status/${id}`, { status: nextStatus });
-    } catch (err) { 
-      fetchMissions(); 
-    }
+    } catch (err) { fetchMissions(); }
   };
 
   const calculateProgress = (type: 'daily' | 'weekly' | 'monthly' | 'yearly') => {
@@ -123,161 +114,340 @@ export default function MobileWorkspaceDeck() {
       setPartnerEmail('');
       fetchProfile();
     } catch (err) { 
-      alert("Mentor frequency address not found."); 
-    } finally { 
-      setIsLinking(false); 
-    }
+      alert("Mentor frequency not detected."); 
+    } finally { setIsLinking(false); }
   };
 
-  const handleBroadcast = async () => {
+  const handleBroadcast = (domainName: string) => async () => {
     if (!broadcastText.trim() && selectedFiles.length === 0) return;
     const postData = {
       authorEmail: localStorage.getItem('v26UserEmail'),
       authorName: userProfile?.displayName || "Creator", 
-      text: `[${workDomain}] ${broadcastText}`,
+      text: `[${domainName}] ${broadcastText}`,
       media: selectedFiles.length > 0 ? selectedFiles.map(f => URL.createObjectURL(f)) : null,
-      visibility: visibility
+      visibility
     };
     try {
       await axios.post('https://v26.onrender.com/api/posts/create', postData);
       setBroadcastText('');
       setSelectedFiles([]); 
-      alert("Work milestone committed to studio log!");
-    } catch (err) { 
-      console.error(err); 
-    }
+      alert("Work milestone logged to your active pipeline!");
+      setActiveScreen('hub');
+    } catch (err) { console.error(err); }
   };
 
   return (
-    <div className="mob-deck-root">
-      
-      {/* 1. APP HEADER */}
-      <header className="mob-deck-header">
-        <div>
-          <span className="mob-subtag">v26 // WORKSPACE</span>
-          <h1 className="mob-title">Production Deck</h1>
-        </div>
-        <div className="mob-mentor-pill" onClick={() => setActiveRoom('alliance')}>
-          <span className={`mob-dot ${userProfile?.partnerEmail ? 'dot-active' : ''}`} />
-          <span>{userProfile?.partnerEmail ? 'Mentor Sync' : 'Solo'}</span>
+    <div className="mobile-hub-root">
+
+      {/* TOP HEADER */}
+      <header className="mobile-nav-bar">
+        {activeScreen === 'hub' ? (
+          <div>
+            <span className="hub-eyebrow">V26 // WORKSPACE</span>
+            <h1 className="hub-main-heading">Production Hub</h1>
+          </div>
+        ) : (
+          <button className="hub-back-trigger" onClick={() => setActiveScreen('hub')}>
+            <span className="back-arrow">‹</span>
+            <span>Hub</span>
+          </button>
+        )}
+
+        <div className="hub-mentor-badge" onClick={() => setActiveScreen('mentorship')}>
+          <span className={`badge-dot ${userProfile?.partnerEmail ? 'dot-active' : ''}`} />
+          <span>{userProfile?.partnerEmail ? 'Mentor Active' : 'Solo'}</span>
         </div>
       </header>
 
-      {/* 2. SUB-PAGE ROOM TOGGLE (Mobile Native Segmented Control) */}
-      <nav className="mob-segmented-nav">
-        <button 
-          onClick={() => setActiveRoom('directives')} 
-          className={`mob-seg-tab ${activeRoom === 'directives' ? 'seg-active' : ''}`}
-        >
-          <span>🎯</span> Directives
-        </button>
-        <button 
-          onClick={() => setActiveRoom('studio')} 
-          className={`mob-seg-tab ${activeRoom === 'studio' ? 'seg-active' : ''}`}
-        >
-          <span>🎛️</span> Studio Log
-        </button>
-        <button 
-          onClick={() => setActiveRoom('alliance')} 
-          className={`mob-seg-tab ${activeRoom === 'alliance' ? 'seg-active' : ''}`}
-        >
-          <span>🤝</span> Mentorship
-        </button>
-      </nav>
+      <main className="mobile-view-container">
 
-      {/* DOMAIN SELECTION CHIPS */}
-      <div className="mob-domain-strip">
-        {(['Music Architecture', 'Enterprise', 'Systems Dev', 'Visual Design'] as const).map(domain => (
-          <button 
-            key={domain} 
-            onClick={() => setWorkDomain(domain)} 
-            className={`mob-domain-pill ${workDomain === domain ? 'pill-active' : ''}`}
-          >
-            {domain}
-          </button>
-        ))}
-      </div>
-
-      {/* MAIN VIEW AREA */}
-      <main className="mob-body-scrollable">
-
-        {/* ======================= SUB-ROOM 1: DIRECTIVES & TARGETS ======================= */}
-        {activeRoom === 'directives' && (
-          <div className="mob-room-content">
-            {/* Velocity Gauges */}
-            <div className="mob-gauges-row">
-              {[
-                { label: 'Daily', pct: calculateProgress('daily'), color: '#6366f1' },
-                { label: 'Weekly', pct: calculateProgress('weekly'), color: '#8b5cf6' },
-                { label: 'Monthly', pct: calculateProgress('monthly'), color: '#22c55e' },
-                { label: 'Horizon', pct: calculateProgress('yearly'), color: '#eab308' },
-              ].map(g => (
-                <div key={g.label} className="mob-gauge-chip">
-                  <span className="mob-gauge-pct" style={{ color: g.color }}>{g.pct}%</span>
-                  <span className="mob-gauge-title">{g.label}</span>
-                </div>
-              ))}
+        {/* ========================================================
+            1. MAIN HUB MENU SCREEN (DRILL-DOWN TILES)
+        ======================================================== */}
+        {activeScreen === 'hub' && (
+          <div className="drilldown-home">
+            
+            {/* Quick Status Bar */}
+            <div className="hub-summary-card" onClick={() => setActiveScreen('directives')}>
+              <div className="summary-col">
+                <span className="summary-number" style={{ color: '#6366f1' }}>{calculateProgress('daily')}%</span>
+                <span className="summary-tag">Daily Pace</span>
+              </div>
+              <div className="summary-line" />
+              <div className="summary-col">
+                <span className="summary-number" style={{ color: '#22c55e' }}>{calculateProgress('weekly')}%</span>
+                <span className="summary-tag">Weekly Goals</span>
+              </div>
+              <div className="summary-line" />
+              <div className="summary-col">
+                <span className="summary-number">{missionsList.length}</span>
+                <span className="summary-tag">Directives</span>
+              </div>
             </div>
 
-            {/* Launch Goal Mini-Card */}
-            <div className="mob-card">
-              <span className="mob-kicker">ADD NEW DIRECTIVE</span>
+            {/* SECTOR 1: COLLABORATIVE DOMAINS */}
+            <div className="hub-list-section">
+              <span className="hub-section-label">WORK DOMAINS</span>
+
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('music')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8' }}>🎵</div>
+                <div className="hub-cell-info">
+                  <span className="hub-cell-title">Music Architecture</span>
+                  <span className="hub-cell-subtitle">Stems, mixdown reviews, and audio drops</span>
+                </div>
+                <span className="hub-cell-arrow">›</span>
+              </div>
+
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('enterprise')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(234, 179, 8, 0.12)', color: '#facc15' }}>💼</div>
+                <div className="hub-cell-info">
+                  <span className="hub-cell-title">Enterprise & Strategy</span>
+                  <span className="hub-cell-subtitle">Decks, business models, and founder logs</span>
+                </div>
+                <span className="hub-cell-arrow">›</span>
+              </div>
+
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('systems')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(34, 197, 94, 0.12)', color: '#4ade80' }}>💻</div>
+                <div className="hub-cell-info">
+                  <span className="hub-cell-title">Systems & Software</span>
+                  <span className="hub-cell-subtitle">Sprints, releases, and architecture commits</span>
+                </div>
+                <span className="hub-cell-arrow">›</span>
+              </div>
+
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('visual')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#f472b6' }}>🎨</div>
+                <div className="hub-cell-info">
+                  <span className="hub-cell-title">Visual Arts & Design</span>
+                  <span className="hub-cell-subtitle">Visual brand systems, 3D and media design</span>
+                </div>
+                <span className="hub-cell-arrow">›</span>
+              </div>
+            </div>
+
+            {/* SECTOR 2: DIRECTIVES & ALLIANCE */}
+            <div className="hub-list-section">
+              <span className="hub-section-label">MANAGEMENT & EXECUTION</span>
+
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('directives')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(168, 85, 247, 0.12)', color: '#c084fc' }}>🎯</div>
+                <div className="hub-cell-info">
+                  <span className="hub-cell-title">Directives & Milestones</span>
+                  <span className="hub-cell-subtitle">Target checklist, velocity and checkoffs</span>
+                </div>
+                <span className="hub-cell-badge">{missionsList.filter(m => m.status === 'active').length}</span>
+                <span className="hub-cell-arrow">›</span>
+              </div>
+
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('mentorship')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#f87171' }}>🤝</div>
+                <div className="hub-cell-info">
+                  <span className="hub-cell-title">Mentorship Pipeline</span>
+                  <span className="hub-cell-subtitle">
+                    {userProfile?.partnerEmail ? userProfile.partnerEmail : 'Link your industry mentor'}
+                  </span>
+                </div>
+                <span className="hub-cell-arrow">›</span>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================
+            2. MUSIC ARCHITECTURE SUB-PAGE
+        ======================================================== */}
+        {activeScreen === 'music' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <span className="subpage-kicker">STUDIO WORKSPACE</span>
+              <h2 className="subpage-title">Music Architecture</h2>
+              <p className="subpage-desc">Share arrangement progress, audio stems, and mix feedback with your mentor.</p>
+            </div>
+
+            <div className="subpage-card">
+              <span className="card-kicker">SESSION LOG</span>
+              <textarea 
+                value={broadcastText} 
+                onChange={(e) => setBroadcastText(e.target.value)} 
+                placeholder="Log session notes (e.g. Mastered verse 1, automated reverb bus, adjusted FL mixer)..." 
+                className="subpage-textarea" 
+              />
+              <div className="subpage-action-row">
+                <label className="file-pick-cta">
+                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
+                  🎵 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Stems / Audio Demo'}</span>
+                </label>
+                <button onClick={handleBroadcast('Music')} className="subpage-primary-btn">
+                  Commit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            3. ENTERPRISE & STRATEGY SUB-PAGE
+        ======================================================== */}
+        {activeScreen === 'enterprise' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <span className="subpage-kicker">FOUNDER & VENTURE ROOM</span>
+              <h2 className="subpage-title">Enterprise & Strategy</h2>
+              <p className="subpage-desc">Submit pitch deck revisions, business models, and market traction for executive review.</p>
+            </div>
+
+            <div className="subpage-card">
+              <span className="card-kicker">VENTURE MILESTONE</span>
+              <textarea 
+                value={broadcastText} 
+                onChange={(e) => setBroadcastText(e.target.value)} 
+                placeholder="Log enterprise step (e.g. Completed slide 3-6 of investor deck, updated revenue projections)..." 
+                className="subpage-textarea" 
+              />
+              <div className="subpage-action-row">
+                <label className="file-pick-cta">
+                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
+                  📄 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Deck / Sheet'}</span>
+                </label>
+                <button onClick={handleBroadcast('Enterprise')} className="subpage-primary-btn">
+                  Commit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            4. SYSTEMS & SOFTWARE SUB-PAGE
+        ======================================================== */}
+        {activeScreen === 'systems' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <span className="subpage-kicker">DEV TERMINAL</span>
+              <h2 className="subpage-title">Systems & Software</h2>
+              <p className="subpage-desc">Log pull requests, backend deployments, and architecture blueprints.</p>
+            </div>
+
+            <div className="subpage-card">
+              <span className="card-kicker">DEV LOG COMMIT</span>
+              <textarea 
+                value={broadcastText} 
+                onChange={(e) => setBroadcastText(e.target.value)} 
+                placeholder="Log system engineering changes (e.g. Connected Next.js API routes, optimized database schemas)..." 
+                className="subpage-textarea" 
+              />
+              <div className="subpage-action-row">
+                <label className="file-pick-cta">
+                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
+                  💻 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Screenshot / Log'}</span>
+                </label>
+                <button onClick={handleBroadcast('Systems')} className="subpage-primary-btn">
+                  Commit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            5. VISUAL ARTS & DESIGN SUB-PAGE
+        ======================================================== */}
+        {activeScreen === 'visual' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <span className="subpage-kicker">DESIGN LAB</span>
+              <h2 className="subpage-title">Visual Arts & Design</h2>
+              <p className="subpage-desc">Share UI mockups, 3D animation assets, brand identities, and visual drops.</p>
+            </div>
+
+            <div className="subpage-card">
+              <span className="card-kicker">VISUAL ASSET LOG</span>
+              <textarea 
+                value={broadcastText} 
+                onChange={(e) => setBroadcastText(e.target.value)} 
+                placeholder="Describe visual deliverable (e.g. Finalized dark mode aesthetic, 3D character render)..." 
+                className="subpage-textarea" 
+              />
+              <div className="subpage-action-row">
+                <label className="file-pick-cta">
+                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
+                  🖼️ <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Design Assets'}</span>
+                </label>
+                <button onClick={handleBroadcast('Visual')} className="subpage-primary-btn">
+                  Commit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            6. DIRECTIVES & MILESTONES SUB-PAGE
+        ======================================================== */}
+        {activeScreen === 'directives' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <span className="subpage-kicker">EXECUTION LOG</span>
+              <h2 className="subpage-title">Directives & Milestones</h2>
+              <p className="subpage-desc">Set clear deliverables for each timeframe. Check them off as you complete work.</p>
+            </div>
+
+            <div className="subpage-card">
+              <span className="card-kicker">ADD DIRECTIVE</span>
               <input 
                 value={newMission} 
                 onChange={(e) => setNewMission(e.target.value)} 
-                placeholder={`Milestone for ${workDomain}...`} 
-                className="mob-input" 
+                placeholder="What milestone are we manifesting?" 
+                className="subpage-input" 
               />
-              <div className="mob-form-row">
+              <div className="subpage-inline-row">
                 <select 
                   value={timeframe} 
                   onChange={(e) => setTimeframe(e.target.value)} 
-                  className="mob-select"
+                  className="subpage-select"
                 >
                   <option value="daily">Daily Target</option>
                   <option value="weekly">Weekly Target</option>
                   <option value="monthly">Monthly Milestone</option>
                   <option value="yearly">Horizon Target</option>
                 </select>
-                <button onClick={handleInitialize} className="mob-cta-btn">
+                <button onClick={handleCreateDirective('Directive')} className="subpage-primary-btn">
                   Launch
                 </button>
               </div>
             </div>
 
-            {/* Timeframe Scope Selector */}
-            <div className="mob-time-selector">
+            <div className="subpage-tabs-bar">
               {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(t => (
                 <button 
                   key={t} 
                   onClick={() => setActiveTab(t)} 
-                  className={`mob-time-btn ${activeTab === t ? 'time-active' : ''}`}
+                  className={`tab-btn ${activeTab === t ? 'tab-active' : ''}`}
                 >
                   {t}
                 </button>
               ))}
             </div>
 
-            {/* Task List */}
-            <div className="mob-tasks-stream">
+            <div className="subpage-tasks-stack">
               {missionsList.filter(item => item.timeframe === activeTab).length === 0 ? (
-                <div className="mob-empty-state">
-                  No {activeTab} directives recorded. Launch one above for mentor review.
-                </div>
+                <div className="empty-subpage-state">No targets active in this horizon.</div>
               ) : (
                 missionsList.filter(item => item.timeframe === activeTab).map((item) => (
                   <div 
                     key={item._id} 
                     onClick={() => togglePlanStatus(item._id, item.status)} 
-                    className={`mob-task-row ${item.status === 'completed' ? 'task-done' : ''}`}
+                    className={`task-entry-row ${item.status === 'completed' ? 'task-done' : ''}`}
                   >
-                    <div className="mob-task-left">
-                      <div className={`mob-check-bubble ${item.status === 'completed' ? 'bubble-done' : ''}`}>
+                    <div className="task-entry-left">
+                      <div className={`entry-checkbox ${item.status === 'completed' ? 'cb-done' : ''}`}>
                         {item.status === 'completed' && "✓"}
                       </div>
-                      <span className="mob-task-text">{item.title}</span>
+                      <span className="entry-title">{item.title}</span>
                     </div>
-                    <button onClick={(e) => handleDeleteMission(item._id, e)} className="mob-trash-btn">
+                    <button onClick={(e) => handleDeleteMission(item._id, e)} className="entry-trash-btn">
                       ✕
                     </button>
                   </div>
@@ -287,117 +457,53 @@ export default function MobileWorkspaceDeck() {
           </div>
         )}
 
-        {/* ======================= SUB-ROOM 2: STUDIO WORK LOG ======================= */}
-        {activeRoom === 'studio' && (
-          <div className="mob-room-content">
-            <div className="mob-card">
-              <div className="mob-card-head">
-                <span className="mob-kicker">STUDIO ARTIFACT TRANSMISSION</span>
-                <div className="mob-scope-pills">
-                  {['private', 'partner', 'public'].map(m => (
-                    <button 
-                      key={m} 
-                      onClick={() => setVisibility(m as any)} 
-                      className={`mob-scope-btn ${visibility === m ? 'scope-active' : ''}`}
-                    >
-                      {m === 'partner' ? 'Mentor' : m}
-                    </button>
-                  ))}
+        {/* ========================================================
+            7. MENTORSHIP PIPELINE SUB-PAGE
+        ======================================================== */}
+        {activeScreen === 'mentorship' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <span className="subpage-kicker">ALLIANCE NETWORK</span>
+              <h2 className="subpage-title">Mentorship Bridge</h2>
+              <p className="subpage-desc">Connect directly to an industry mentor for real-time progress oversight.</p>
+            </div>
+
+            {userProfile?.partnerEmail ? (
+              <div className="subpage-card">
+                <span className="card-kicker">ACTIVE MENTOR</span>
+                <div className="mentor-live-row">
+                  <div className="mentor-crest">{userProfile.partnerEmail[0].toUpperCase()}</div>
+                  <div>
+                    <h3 className="mentor-email-text">{userProfile.partnerEmail}</h3>
+                    <span className="mentor-live-status">Direct Bridge Synchronized</span>
+                  </div>
                 </div>
               </div>
-
-              <textarea 
-                value={broadcastText} 
-                onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder={`Describe session progress for ${workDomain} (e.g., Mixed vocal leads, completed business pitch deck slide 5)...`} 
-                className="mob-textarea" 
-              />
-
-              <div className="mob-studio-action-row">
-                <label className="mob-file-cta">
-                  <input 
-                    type="file" 
-                    multiple 
-                    style={{ display: 'none' }} 
-                    onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} 
-                  />
-                  📁 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Upload Stems / Media'}</span>
-                </label>
-                <button onClick={handleBroadcast} className="mob-cta-btn">
-                  Commit
+            ) : (
+              <div className="subpage-card">
+                <span className="card-kicker">INVITE INDUSTRY MENTOR</span>
+                <p className="card-desc">Enter your mentor's email to bridge their terminal to your progress stream.</p>
+                <input 
+                  value={partnerEmail} 
+                  onChange={(e) => setPartnerEmail(e.target.value)} 
+                  placeholder="Mentor email address..." 
+                  className="subpage-input" 
+                />
+                <button onClick={linkPartner} disabled={isLinking} className="subpage-primary-btn" style={{ width: '100%', marginTop: '6px' }}>
+                  {isLinking ? 'Sending Transmission...' : 'Send Mentorship Invitation'}
                 </button>
               </div>
-            </div>
-
-            <div className="mob-info-banner">
-              <span className="mob-info-icon">💡</span>
-              <p className="mob-info-text">
-                Artifacts shared in "Mentor" mode only transmit down your verified alliance pipeline. Public commits display onto the global Matrix stream.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ======================= SUB-ROOM 3: MENTORSHIP & ALLIANCE ======================= */}
-        {activeRoom === 'alliance' && (
-          <div className="mob-room-content">
-            <div className="mob-card">
-              <span className="mob-kicker">ACTIVE MENTORSHIP PIPELINE</span>
-
-              {userProfile?.partnerEmail ? (
-                <div className="mob-mentor-box">
-                  <div className="mob-mentor-avatar">
-                    {userProfile.partnerEmail[0].toUpperCase()}
-                  </div>
-                  <div>
-                    <span className="mob-mentor-meta">VERIFIED ALLIANCE BRIDGE</span>
-                    <h3 className="mob-mentor-email">{userProfile.partnerEmail}</h3>
-                    <p className="mob-mentor-hint">
-                      Dual-sync active: Your directives and studio logs are viewable by your mentor.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="mob-unlinked-box">
-                  <p className="mob-unlinked-text">
-                    Invite an entrepreneur, veteran music producer, or industry leader to review your progression.
-                  </p>
-                  <input 
-                    value={partnerEmail} 
-                    onChange={(e) => setPartnerEmail(e.target.value)} 
-                    placeholder="Mentor email address..." 
-                    className="mob-input" 
-                  />
-                  <button onClick={linkPartner} disabled={isLinking} className="mob-cta-btn mob-btn-full">
-                    {isLinking ? 'Transmitting Bridge Request...' : 'Send Mentorship Invitation'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="mob-card">
-              <span className="mob-kicker">ACCOUNT SECURITY STATUS</span>
-              <div className="mob-status-list">
-                <div className="mob-status-item">
-                  <span>Cryptographic Channel</span>
-                  <span style={{ color: '#22c55e', fontWeight: 700 }}>Level 1 Active</span>
-                </div>
-                <div className="mob-status-item">
-                  <span>Autonomous Rank</span>
-                  <span style={{ color: '#818cf8', fontWeight: 700 }}>Creator Tier</span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
       </main>
 
-      {/* 📱 PERSISTENT UNIFIED BOTTOM NAV */}
+      {/* Persistent Bottom Nav */}
       <BottomNav hasNotification={!!userProfile?.incomingRequest} />
 
       <style jsx global>{`
-        .mob-deck-root {
+        .mobile-hub-root {
           background-color: #08080a;
           min-height: 100vh;
           color: #f4f4f5;
@@ -405,8 +511,8 @@ export default function MobileWorkspaceDeck() {
           letter-spacing: -0.01em;
         }
 
-        /* Top Header */
-        .mob-deck-header {
+        /* Nav Header */
+        .mobile-nav-bar {
           position: sticky;
           top: 0;
           background: rgba(8, 8, 10, 0.9);
@@ -416,9 +522,10 @@ export default function MobileWorkspaceDeck() {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 14px 16px 8px 16px;
+          padding: 14px 18px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .mob-subtag {
+        .hub-eyebrow {
           font-size: 0.55rem;
           font-weight: 800;
           letter-spacing: 1.5px;
@@ -426,14 +533,27 @@ export default function MobileWorkspaceDeck() {
           font-family: monospace;
           display: block;
         }
-        .mob-title {
+        .hub-main-heading {
           font-size: 1.15rem;
           font-weight: 900;
           letter-spacing: -0.5px;
           margin: 2px 0 0 0;
           color: #fff;
         }
-        .mob-mentor-pill {
+        .hub-back-trigger {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: transparent;
+          border: none;
+          color: #818cf8;
+          font-size: 0.95rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .back-arrow { font-size: 1.4rem; line-height: 1; }
+
+        .hub-mentor-badge {
           display: flex;
           align-items: center;
           gap: 6px;
@@ -445,129 +565,125 @@ export default function MobileWorkspaceDeck() {
           font-weight: 700;
           cursor: pointer;
         }
-        .mob-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #52525b;
-        }
+        .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #52525b; }
         .dot-active { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
 
-        /* Segmented Room Control */
-        .mob-segmented-nav {
-          display: flex;
-          gap: 4px;
-          margin: 6px 14px 10px 14px;
-          background: #111116;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          padding: 3px;
-          border-radius: 12px;
+        .mobile-view-container {
+          max-width: 500px;
+          margin: 0 auto;
+          padding: 16px 14px 100px 14px;
         }
-        .mob-seg-tab {
-          flex: 1;
+
+        /* Summary Card */
+        .hub-summary-card {
+          display: flex;
+          align-items: center;
+          background: #0e0e13;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 16px;
+          padding: 14px 10px;
+          margin-bottom: 20px;
+          cursor: pointer;
+        }
+        .summary-col { flex: 1; text-align: center; }
+        .summary-number { font-size: 1.25rem; font-weight: 900; color: #fff; font-family: monospace; display: block; }
+        .summary-tag { font-size: 0.58rem; font-weight: 800; color: #71717a; text-transform: uppercase; margin-top: 2px; }
+        .summary-line { width: 1px; height: 26px; background: rgba(255, 255, 255, 0.06); }
+
+        /* Hub Menu Rows */
+        .hub-list-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
+        .hub-section-label {
+          font-size: 0.6rem;
+          font-weight: 800;
+          letter-spacing: 1.2px;
+          color: #71717a;
+          font-family: monospace;
+          padding-left: 4px;
+          margin-bottom: 2px;
+        }
+        .hub-menu-cell {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          background: #0e0e13;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 14px;
+          padding: 14px 16px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .hub-menu-cell:active { transform: scale(0.98); background: #14141c; }
+        .hub-cell-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 5px;
-          background: transparent;
-          border: none;
-          padding: 8px 0;
-          border-radius: 8px;
-          color: #71717a;
-          font-size: 0.74rem;
-          font-weight: 700;
-          cursor: pointer;
-          transition: all 0.15s;
+          font-size: 1.15rem;
+          flex-shrink: 0;
         }
-        .seg-active {
-          background: #1c1c24;
-          color: #fff !important;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-        }
+        .hub-cell-info { flex: 1; display: flex; flex-direction: column; }
+        .hub-cell-title { font-size: 0.88rem; font-weight: 700; color: #f4f4f5; }
+        .hub-cell-subtitle { font-size: 0.72rem; color: #71717a; margin-top: 2px; }
+        .hub-cell-badge { font-size: 0.62rem; font-weight: 800; color: #818cf8; background: #1e1b4b; padding: 3px 8px; border-radius: 10px; }
+        .hub-cell-arrow { font-size: 1.2rem; color: #52525b; font-weight: 600; }
 
-        /* Domain Selector Strip */
-        .mob-domain-strip {
-          display: flex;
-          gap: 6px;
-          padding: 0 14px 10px 14px;
-          overflow-x: auto;
-          scrollbar-width: none;
-        }
-        .mob-domain-strip::-webkit-scrollbar { display: none; }
-        .mob-domain-pill {
-          background: #0e0e12;
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          color: #71717a;
-          padding: 4px 10px;
-          border-radius: 16px;
-          font-size: 0.68rem;
-          font-weight: 600;
-          white-space: nowrap;
-          cursor: pointer;
-        }
-        .pill-active {
-          background: #1e1b4b;
-          border-color: #6366f1;
-          color: #c7d2fe;
-          font-weight: 700;
-        }
+        /* Sub-Pages Style */
+        .subpage-screen { display: flex; flex-direction: column; gap: 14px; }
+        .subpage-banner { margin-bottom: 4px; }
+        .subpage-kicker { font-size: 0.58rem; font-weight: 800; color: #818cf8; font-family: monospace; letter-spacing: 1.2px; }
+        .subpage-title { font-size: 1.3rem; font-weight: 900; color: #fff; margin: 2px 0 4px 0; }
+        .subpage-desc { font-size: 0.78rem; color: #71717a; margin: 0; line-height: 1.4; }
 
-        /* Main Body */
-        .mob-body-scrollable {
-          padding: 0 14px 95px 14px;
-          max-width: 520px;
-          margin: 0 auto;
-        }
-        .mob-room-content { display: flex; flex-direction: column; gap: 12px; }
-
-        /* Gauges Row */
-        .mob-gauges-row {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-          background: #0e0e13;
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 14px;
-          padding: 12px 6px;
-          text-align: center;
-        }
-        .mob-gauge-chip { display: flex; flex-direction: column; align-items: center; }
-        .mob-gauge-pct { font-size: 0.95rem; font-weight: 900; font-family: monospace; }
-        .mob-gauge-title { font-size: 0.58rem; font-weight: 800; color: #71717a; text-transform: uppercase; margin-top: 2px; }
-
-        /* Mobile Cards */
-        .mob-card {
+        .subpage-card {
           background: #0e0e13;
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 16px;
           padding: 16px;
         }
-        .mob-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .mob-kicker {
-          font-size: 0.6rem;
-          font-weight: 800;
-          letter-spacing: 1.2px;
-          color: #818cf8;
-          font-family: monospace;
-          display: block;
-          margin-bottom: 8px;
+        .card-kicker { font-size: 0.6rem; font-weight: 800; color: #818cf8; font-family: monospace; letter-spacing: 1px; display: block; margin-bottom: 8px; }
+        .card-desc { font-size: 0.78rem; color: #a1a1aa; margin: 0 0 10px 0; }
+        .subpage-textarea {
+          width: 100%;
+          height: 100px;
+          background: #14141c;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 12px;
+          padding: 12px;
+          color: #fff;
+          font-size: 0.85rem;
+          outline: none;
+          box-sizing: border-box;
+          resize: none;
+        }
+        .subpage-action-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .file-pick-cta { color: #818cf8; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+        .subpage-primary-btn {
+          background: #6366f1;
+          color: #fff;
+          border: none;
+          border-radius: 10px;
+          padding: 10px 18px;
+          font-weight: 700;
+          font-size: 0.82rem;
+          cursor: pointer;
         }
 
-        /* Inputs & Form Controls */
-        .mob-input {
+        .subpage-input {
           width: 100%;
           background: #14141c;
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 10px;
           padding: 10px 12px;
           color: #fff;
-          font-size: 0.82rem;
+          font-size: 0.85rem;
           outline: none;
           box-sizing: border-box;
           margin-bottom: 8px;
         }
-        .mob-form-row { display: flex; gap: 8px; }
-        .mob-select {
+        .subpage-inline-row { display: flex; gap: 8px; }
+        .subpage-select {
           flex: 1;
           background: #14141c;
           border: 1px solid rgba(255, 255, 255, 0.08);
@@ -575,49 +691,32 @@ export default function MobileWorkspaceDeck() {
           padding: 0 10px;
           color: #a1a1aa;
           font-size: 0.78rem;
-          font-weight: 600;
           outline: none;
         }
-        .mob-cta-btn {
-          background: #6366f1;
-          color: #fff;
-          border: none;
-          border-radius: 10px;
-          padding: 10px 18px;
-          font-weight: 700;
-          font-size: 0.8rem;
-          cursor: pointer;
-        }
-        .mob-btn-full { width: 100%; margin-top: 6px; }
 
-        /* Time Selector */
-        .mob-time-selector {
+        .subpage-tabs-bar {
           display: flex;
           gap: 4px;
           background: #121217;
           padding: 3px;
           border-radius: 10px;
         }
-        .mob-time-btn {
+        .tab-btn {
           flex: 1;
           background: transparent;
           border: none;
           color: #71717a;
-          font-size: 0.7rem;
+          font-size: 0.72rem;
           font-weight: 700;
           padding: 6px 0;
           border-radius: 6px;
           text-transform: capitalize;
           cursor: pointer;
         }
-        .time-active {
-          background: #1c1c26;
-          color: #fff;
-        }
+        .tab-active { background: #1e1b4b; color: #818cf8; }
 
-        /* Tasks Stream */
-        .mob-tasks-stream { display: flex; flex-direction: column; gap: 6px; }
-        .mob-task-row {
+        .subpage-tasks-stack { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+        .task-entry-row {
           background: #121217;
           border: 1px solid rgba(255, 255, 255, 0.04);
           border-radius: 12px;
@@ -628,8 +727,8 @@ export default function MobileWorkspaceDeck() {
           cursor: pointer;
         }
         .task-done { opacity: 0.45; }
-        .mob-task-left { display: flex; align-items: center; gap: 10px; }
-        .mob-check-bubble {
+        .task-entry-left { display: flex; align-items: center; gap: 10px; }
+        .entry-checkbox {
           width: 18px;
           height: 18px;
           border: 2px solid #3f3f46;
@@ -641,58 +740,13 @@ export default function MobileWorkspaceDeck() {
           font-weight: 900;
           color: #fff;
         }
-        .bubble-done { background: #6366f1; border-color: #6366f1; }
-        .mob-task-text { font-size: 0.82rem; font-weight: 600; color: #f4f4f5; }
-        .mob-trash-btn { background: transparent; border: none; color: #71717a; cursor: pointer; }
-        .mob-empty-state { text-align: center; color: #52525b; font-size: 0.78rem; padding: 24px 10px; }
+        .cb-done { background: #6366f1; border-color: #6366f1; }
+        .entry-title { font-size: 0.82rem; font-weight: 600; color: #f4f4f5; }
+        .entry-trash-btn { background: transparent; border: none; color: #71717a; cursor: pointer; }
+        .empty-subpage-state { text-align: center; color: #52525b; font-size: 0.8rem; padding: 24px 0; }
 
-        /* Studio Specific */
-        .mob-scope-pills { display: flex; gap: 4px; }
-        .mob-scope-btn {
-          background: #181822;
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          color: #71717a;
-          font-size: 0.62rem;
-          font-weight: 700;
-          padding: 3px 8px;
-          border-radius: 6px;
-          cursor: pointer;
-        }
-        .scope-active { background: #6366f1; color: #fff; border-color: #6366f1; }
-        .mob-textarea {
-          width: 100%;
-          height: 90px;
-          background: #14141c;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 10px;
-          padding: 10px 12px;
-          color: #fff;
-          font-size: 0.82rem;
-          outline: none;
-          box-sizing: border-box;
-          resize: none;
-        }
-        .mob-studio-action-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: 10px;
-        }
-        .mob-file-cta { color: #818cf8; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
-        .mob-info-banner {
-          display: flex;
-          gap: 10px;
-          background: rgba(99, 102, 241, 0.05);
-          border: 1px solid rgba(99, 102, 241, 0.15);
-          border-radius: 14px;
-          padding: 12px;
-        }
-        .mob-info-icon { font-size: 1.1rem; }
-        .mob-info-text { font-size: 0.75rem; color: #a1a1aa; margin: 0; line-height: 1.4; }
-
-        /* Mentor Specific */
-        .mob-mentor-box { display: flex; gap: 12px; align-items: center; }
-        .mob-mentor-avatar {
+        .mentor-live-row { display: flex; gap: 12px; align-items: center; }
+        .mentor-crest {
           width: 44px;
           height: 44px;
           border-radius: 12px;
@@ -703,21 +757,9 @@ export default function MobileWorkspaceDeck() {
           font-weight: 900;
           font-size: 1.1rem;
           color: #fff;
-          flex-shrink: 0;
         }
-        .mob-mentor-meta { font-size: 0.58rem; font-weight: 800; color: #818cf8; font-family: monospace; }
-        .mob-mentor-email { font-size: 0.88rem; margin: 2px 0 0 0; color: #fff; }
-        .mob-mentor-hint { font-size: 0.72rem; color: #71717a; margin: 4px 0 0 0; }
-        .mob-unlinked-text { font-size: 0.8rem; color: #a1a1aa; line-height: 1.4; margin: 0 0 10px 0; }
-        .mob-status-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-        .mob-status-item {
-          display: flex;
-          justify-content: space-between;
-          font-size: 0.78rem;
-          color: #a1a1aa;
-          padding-bottom: 6px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        }
+        .mentor-email-text { font-size: 0.9rem; font-weight: 800; color: #fff; margin: 0; }
+        .mentor-live-status { font-size: 0.72rem; color: #22c55e; }
       `}</style>
     </div>
   );

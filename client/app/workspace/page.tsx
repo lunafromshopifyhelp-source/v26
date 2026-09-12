@@ -11,6 +11,7 @@ interface UserProfile {
   partnerStatus?: 'none' | 'pending' | 'active';
   incomingRequest?: string;
   visionRank?: number;
+  talent?: string;
 }
 
 interface MissionItem {
@@ -25,21 +26,24 @@ type ScreenMode = 'hub' | 'music' | 'enterprise' | 'systems' | 'visual' | 'direc
 export default function MobileWorkspaceDeck() {
   const router = useRouter();
 
-  // Active Screen / Sub-page State
+  // Active Screen Navigation State
   const [activeScreen, setActiveScreen] = useState<ScreenMode>('hub');
 
-  // Backend States
+  // Backend Data States
   const [missionsList, setMissionsList] = useState<MissionItem[]>([]);
   const [newMission, setNewMission] = useState("");
   const [timeframe, setTimeframe] = useState("daily");
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
 
-  // Mentorship
+  // Mentorship State
   const [partnerEmail, setPartnerEmail] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
-  // Studio Logs
+  // User Primary Craft / Talent Specialization
+  const [userTalent, setUserTalent] = useState<string>('Music Architecture');
+
+  // Studio Logs State
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]); 
   const [broadcastText, setBroadcastText] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'partner' | 'public'>('partner');
@@ -59,6 +63,12 @@ export default function MobileWorkspaceDeck() {
     try {
       const res = await axios.get(`https://v26.onrender.com/api/auth/profile/${email}`);
       setUserProfile(res.data);
+      if (res.data.talent) {
+        setUserTalent(res.data.talent);
+      } else {
+        const saved = localStorage.getItem('v26UserTalent');
+        if (saved) setUserTalent(saved);
+      }
     } catch (err) { console.error(err); }
   };
 
@@ -83,7 +93,7 @@ export default function MobileWorkspaceDeck() {
 
   const handleDeleteMission = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
-    if (!window.confirm("Delete this target milestone?")) return;
+    if (!window.confirm("Delete this milestone target?")) return;
     try {
       await axios.delete(`https://v26.onrender.com/api/missions/delete/${id}`);
       setMissionsList(prev => prev.filter(m => m._id !== id));
@@ -131,20 +141,36 @@ export default function MobileWorkspaceDeck() {
       await axios.post('https://v26.onrender.com/api/posts/create', postData);
       setBroadcastText('');
       setSelectedFiles([]); 
-      alert("Work milestone logged to your active pipeline!");
+      alert("Work milestone logged to your pipeline!");
       setActiveScreen('hub');
     } catch (err) { console.error(err); }
   };
 
+  const setPrimaryTalent = (t: string) => {
+    setUserTalent(t);
+    localStorage.setItem('v26UserTalent', t);
+  };
+
+  const userInitial = (userProfile?.displayName || userProfile?.email || 'U')[0].toUpperCase();
+
   return (
     <div className="mobile-hub-root">
 
-      {/* TOP HEADER */}
+      {/* TOP NATIVE APP HEADER WITH PROFILE AVATAR */}
       <header className="mobile-nav-bar">
         {activeScreen === 'hub' ? (
-          <div>
-            <span className="hub-eyebrow">V26 // WORKSPACE</span>
-            <h1 className="hub-main-heading">Production Hub</h1>
+          <div className="nav-profile-header-group">
+            <button 
+              className="nav-avatar-pill" 
+              onClick={() => router.push('/profile')}
+              aria-label="Profile Settings"
+            >
+              <div className="avatar-circle">{userInitial}</div>
+              <div className="avatar-meta">
+                <span className="avatar-user-name">{userProfile?.displayName || userProfile?.email?.split('@')[0] || 'Creator'}</span>
+                <span className="avatar-subtext">View Profile ›</span>
+              </div>
+            </button>
           </div>
         ) : (
           <button className="hub-back-trigger" onClick={() => setActiveScreen('hub')}>
@@ -153,21 +179,66 @@ export default function MobileWorkspaceDeck() {
           </button>
         )}
 
-        <div className="hub-mentor-badge" onClick={() => setActiveScreen('mentorship')}>
-          <span className={`badge-dot ${userProfile?.partnerEmail ? 'dot-active' : ''}`} />
-          <span>{userProfile?.partnerEmail ? 'Mentor Active' : 'Solo'}</span>
+        <div className="nav-header-right">
+          <div className="hub-mentor-badge" onClick={() => setActiveScreen('mentorship')}>
+            <span className={`badge-dot ${userProfile?.partnerEmail ? 'dot-active' : ''}`} />
+            <span>{userProfile?.partnerEmail ? 'Mentor Sync' : 'Solo'}</span>
+          </div>
+          {activeScreen !== 'hub' && (
+            <div 
+              className="avatar-circle avatar-small" 
+              onClick={() => router.push('/profile')}
+            >
+              {userInitial}
+            </div>
+          )}
         </div>
       </header>
 
       <main className="mobile-view-container">
 
         {/* ========================================================
-            1. MAIN HUB MENU SCREEN (DRILL-DOWN TILES)
+            1. MAIN HUB MENU SCREEN (PERSONALIZED TO TALENT)
         ======================================================== */}
         {activeScreen === 'hub' && (
           <div className="drilldown-home">
             
-            {/* Quick Status Bar */}
+            {/* TALENT-CUSTOMIZED DEDICATED SUITE HERO CARD */}
+            <div className="talent-hero-card">
+              <div className="talent-hero-top">
+                <span className="talent-tag">DEDICATED CRAFT STUDIO</span>
+                <button 
+                  className="talent-switch-btn" 
+                  onClick={() => {
+                    const talents = ['Music Architecture', 'Visual Arts & Design', 'Enterprise & Strategy', 'Systems & Software'];
+                    const next = talents[(talents.indexOf(userTalent) + 1) % talents.length];
+                    setPrimaryTalent(next);
+                  }}
+                >
+                  Switch Craft ▾
+                </button>
+              </div>
+              <h2 className="talent-hero-title">{userTalent}</h2>
+              <p className="talent-hero-desc">
+                {userTalent === 'Music Architecture' && "Your custom music suite: stem submissions, audio arrangement reviews, and FL mixer cues."}
+                {userTalent === 'Visual Arts & Design' && "Your custom visual studio: moodboards, 3D renders, palette systems, and artwork reviews."}
+                {userTalent === 'Enterprise & Strategy' && "Your executive suite: pitch deck drafts, valuation models, and venture mentor oversight."}
+                {userTalent === 'Systems & Software' && "Your engineering terminal: git branches, system architecture blueprints, and sprint commits."}
+              </p>
+              <button 
+                className="talent-enter-btn"
+                onClick={() => {
+                  if (userTalent === 'Music Architecture') setActiveScreen('music');
+                  else if (userTalent === 'Visual Arts & Design') setActiveScreen('visual');
+                  else if (userTalent === 'Enterprise & Strategy') setActiveScreen('enterprise');
+                  else setActiveScreen('systems');
+                }}
+              >
+                Launch {userTalent.split(' ')[0]} Studio →
+              </button>
+            </div>
+
+            {/* Velocity Metrics Glance */}
             <div className="hub-summary-card" onClick={() => setActiveScreen('directives')}>
               <div className="summary-col">
                 <span className="summary-number" style={{ color: '#6366f1' }}>{calculateProgress('daily')}%</span>
@@ -176,7 +247,7 @@ export default function MobileWorkspaceDeck() {
               <div className="summary-line" />
               <div className="summary-col">
                 <span className="summary-number" style={{ color: '#22c55e' }}>{calculateProgress('weekly')}%</span>
-                <span className="summary-tag">Weekly Goals</span>
+                <span className="summary-tag">Weekly Targets</span>
               </div>
               <div className="summary-line" />
               <div className="summary-col">
@@ -185,9 +256,9 @@ export default function MobileWorkspaceDeck() {
               </div>
             </div>
 
-            {/* SECTOR 1: COLLABORATIVE DOMAINS */}
+            {/* SECTOR 1: WORKSPACE DOMAINS */}
             <div className="hub-list-section">
-              <span className="hub-section-label">WORK DOMAINS</span>
+              <span className="hub-section-label">PRODUCTION SUITES</span>
 
               <div className="hub-menu-cell" onClick={() => setActiveScreen('music')}>
                 <div className="hub-cell-icon" style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8' }}>🎵</div>
@@ -198,11 +269,20 @@ export default function MobileWorkspaceDeck() {
                 <span className="hub-cell-arrow">›</span>
               </div>
 
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('visual')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#f472b6' }}>🎨</div>
+                <div className="hub-cell-info">
+                  <span className="hub-cell-title">Visual Arts & Design</span>
+                  <span className="hub-cell-subtitle">Brand design, 3D renders, and visual assets</span>
+                </div>
+                <span className="hub-cell-arrow">›</span>
+              </div>
+
               <div className="hub-menu-cell" onClick={() => setActiveScreen('enterprise')}>
                 <div className="hub-cell-icon" style={{ background: 'rgba(234, 179, 8, 0.12)', color: '#facc15' }}>💼</div>
                 <div className="hub-cell-info">
                   <span className="hub-cell-title">Enterprise & Strategy</span>
-                  <span className="hub-cell-subtitle">Decks, business models, and founder logs</span>
+                  <span className="hub-cell-subtitle">Pitch decks, financial models, and executive logs</span>
                 </div>
                 <span className="hub-cell-arrow">›</span>
               </div>
@@ -211,16 +291,7 @@ export default function MobileWorkspaceDeck() {
                 <div className="hub-cell-icon" style={{ background: 'rgba(34, 197, 94, 0.12)', color: '#4ade80' }}>💻</div>
                 <div className="hub-cell-info">
                   <span className="hub-cell-title">Systems & Software</span>
-                  <span className="hub-cell-subtitle">Sprints, releases, and architecture commits</span>
-                </div>
-                <span className="hub-cell-arrow">›</span>
-              </div>
-
-              <div className="hub-menu-cell" onClick={() => setActiveScreen('visual')}>
-                <div className="hub-cell-icon" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#f472b6' }}>🎨</div>
-                <div className="hub-cell-info">
-                  <span className="hub-cell-title">Visual Arts & Design</span>
-                  <span className="hub-cell-subtitle">Visual brand systems, 3D and media design</span>
+                  <span className="hub-cell-subtitle">Engineering sprints, architecture and PR commits</span>
                 </div>
                 <span className="hub-cell-arrow">›</span>
               </div>
@@ -228,15 +299,15 @@ export default function MobileWorkspaceDeck() {
 
             {/* SECTOR 2: DIRECTIVES & ALLIANCE */}
             <div className="hub-list-section">
-              <span className="hub-section-label">MANAGEMENT & EXECUTION</span>
+              <span className="hub-section-label">COLLABORATION & REVIEW</span>
 
               <div className="hub-menu-cell" onClick={() => setActiveScreen('directives')}>
                 <div className="hub-cell-icon" style={{ background: 'rgba(168, 85, 247, 0.12)', color: '#c084fc' }}>🎯</div>
                 <div className="hub-cell-info">
                   <span className="hub-cell-title">Directives & Milestones</span>
-                  <span className="hub-cell-subtitle">Target checklist, velocity and checkoffs</span>
+                  <span className="hub-cell-subtitle">Actionable sprint checklists & velocity checkoffs</span>
                 </div>
-                <span className="hub-cell-badge">{missionsList.filter(m => m.status === 'active').length}</span>
+                <span className="hub-cell-badge">{missionsList.filter(m => m.status === 'active').length} active</span>
                 <span className="hub-cell-arrow">›</span>
               </div>
 
@@ -245,7 +316,7 @@ export default function MobileWorkspaceDeck() {
                 <div className="hub-cell-info">
                   <span className="hub-cell-title">Mentorship Pipeline</span>
                   <span className="hub-cell-subtitle">
-                    {userProfile?.partnerEmail ? userProfile.partnerEmail : 'Link your industry mentor'}
+                    {userProfile?.partnerEmail ? userProfile.partnerEmail : 'Link industry mentor or mentee'}
                   </span>
                 </div>
                 <span className="hub-cell-arrow">›</span>
@@ -256,31 +327,31 @@ export default function MobileWorkspaceDeck() {
         )}
 
         {/* ========================================================
-            2. MUSIC ARCHITECTURE SUB-PAGE
+            2. MUSIC ARCHITECTURE SUB-PAGE (AUDIO VIBE)
         ======================================================== */}
         {activeScreen === 'music' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
-              <span className="subpage-kicker">STUDIO WORKSPACE</span>
+              <div className="craft-badge" style={{ color: '#818cf8', borderColor: 'rgba(99, 102, 241, 0.3)' }}>🎵 AUDIO STUDIO</div>
               <h2 className="subpage-title">Music Architecture</h2>
-              <p className="subpage-desc">Share arrangement progress, audio stems, and mix feedback with your mentor.</p>
+              <p className="subpage-desc">Share arrangement stems, mixdown balances, and DAW session notes with your mentor.</p>
             </div>
 
             <div className="subpage-card">
-              <span className="card-kicker">SESSION LOG</span>
+              <span className="card-kicker">SESSION LOG // FL & MIXDOWN</span>
               <textarea 
                 value={broadcastText} 
                 onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Log session notes (e.g. Mastered verse 1, automated reverb bus, adjusted FL mixer)..." 
+                placeholder="Log session notes (e.g., Mastered lead vocals on verse 1, sidechained 808 to kick, balanced master limiter)..." 
                 className="subpage-textarea" 
               />
               <div className="subpage-action-row">
                 <label className="file-pick-cta">
                   <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  🎵 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Stems / Audio Demo'}</span>
+                  🎵 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Upload Stems / Audio Demo (.mp3, .wav)'}</span>
                 </label>
                 <button onClick={handleBroadcast('Music')} className="subpage-primary-btn">
-                  Commit
+                  Commit Track
                 </button>
               </div>
             </div>
@@ -288,95 +359,95 @@ export default function MobileWorkspaceDeck() {
         )}
 
         {/* ========================================================
-            3. ENTERPRISE & STRATEGY SUB-PAGE
-        ======================================================== */}
-        {activeScreen === 'enterprise' && (
-          <div className="subpage-screen">
-            <div className="subpage-banner">
-              <span className="subpage-kicker">FOUNDER & VENTURE ROOM</span>
-              <h2 className="subpage-title">Enterprise & Strategy</h2>
-              <p className="subpage-desc">Submit pitch deck revisions, business models, and market traction for executive review.</p>
-            </div>
-
-            <div className="subpage-card">
-              <span className="card-kicker">VENTURE MILESTONE</span>
-              <textarea 
-                value={broadcastText} 
-                onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Log enterprise step (e.g. Completed slide 3-6 of investor deck, updated revenue projections)..." 
-                className="subpage-textarea" 
-              />
-              <div className="subpage-action-row">
-                <label className="file-pick-cta">
-                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  📄 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Deck / Sheet'}</span>
-                </label>
-                <button onClick={handleBroadcast('Enterprise')} className="subpage-primary-btn">
-                  Commit
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            4. SYSTEMS & SOFTWARE SUB-PAGE
-        ======================================================== */}
-        {activeScreen === 'systems' && (
-          <div className="subpage-screen">
-            <div className="subpage-banner">
-              <span className="subpage-kicker">DEV TERMINAL</span>
-              <h2 className="subpage-title">Systems & Software</h2>
-              <p className="subpage-desc">Log pull requests, backend deployments, and architecture blueprints.</p>
-            </div>
-
-            <div className="subpage-card">
-              <span className="card-kicker">DEV LOG COMMIT</span>
-              <textarea 
-                value={broadcastText} 
-                onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Log system engineering changes (e.g. Connected Next.js API routes, optimized database schemas)..." 
-                className="subpage-textarea" 
-              />
-              <div className="subpage-action-row">
-                <label className="file-pick-cta">
-                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  💻 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Screenshot / Log'}</span>
-                </label>
-                <button onClick={handleBroadcast('Systems')} className="subpage-primary-btn">
-                  Commit
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            5. VISUAL ARTS & DESIGN SUB-PAGE
+            3. VISUAL ARTS & DESIGN SUB-PAGE (CANVAS VIBE)
         ======================================================== */}
         {activeScreen === 'visual' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
-              <span className="subpage-kicker">DESIGN LAB</span>
+              <div className="craft-badge" style={{ color: '#f472b6', borderColor: 'rgba(236, 72, 153, 0.3)' }}>🎨 VISUAL LAB</div>
               <h2 className="subpage-title">Visual Arts & Design</h2>
-              <p className="subpage-desc">Share UI mockups, 3D animation assets, brand identities, and visual drops.</p>
+              <p className="subpage-desc">Submit branding assets, 3D character renders, layout mockups, and typography drafts.</p>
             </div>
 
             <div className="subpage-card">
-              <span className="card-kicker">VISUAL ASSET LOG</span>
+              <span className="card-kicker">CREATIVE ARTIFACT LOG</span>
               <textarea 
                 value={broadcastText} 
                 onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Describe visual deliverable (e.g. Finalized dark mode aesthetic, 3D character render)..." 
+                placeholder="Describe your design progress (e.g., Crafted visual aesthetic in dark slate, 3D lighting render finalized)..." 
                 className="subpage-textarea" 
               />
               <div className="subpage-action-row">
                 <label className="file-pick-cta">
                   <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  🖼️ <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Design Assets'}</span>
+                  🖼️ <span>{selectedFiles.length > 0 ? `${selectedFiles.length} artwork(s) loaded` : 'Attach Design Assets / Renders'}</span>
                 </label>
                 <button onClick={handleBroadcast('Visual')} className="subpage-primary-btn">
-                  Commit
+                  Commit Artwork
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            4. ENTERPRISE & STRATEGY SUB-PAGE (FOUNDER VIBE)
+        ======================================================== */}
+        {activeScreen === 'enterprise' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <div className="craft-badge" style={{ color: '#facc15', borderColor: 'rgba(234, 179, 8, 0.3)' }}>💼 EXECUTIVE ROOM</div>
+              <h2 className="subpage-title">Enterprise & Strategy</h2>
+              <p className="subpage-desc">Review investor decks, unit economics, monetization plans, and growth roadmap with billionaire mentors.</p>
+            </div>
+
+            <div className="subpage-card">
+              <span className="card-kicker">COMMERCIAL MILESTONE LOG</span>
+              <textarea 
+                value={broadcastText} 
+                onChange={(e) => setBroadcastText(e.target.value)} 
+                placeholder="Log enterprise step (e.g., Finalized investor deck slide 4-8, established initial customer validation pipeline)..." 
+                className="subpage-textarea" 
+              />
+              <div className="subpage-action-row">
+                <label className="file-pick-cta">
+                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
+                  📄 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Deck (.pdf) / Sheet'}</span>
+                </label>
+                <button onClick={handleBroadcast('Enterprise')} className="subpage-primary-btn">
+                  Submit Deck
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            5. SYSTEMS & SOFTWARE SUB-PAGE (TERMINAL VIBE)
+        ======================================================== */}
+        {activeScreen === 'systems' && (
+          <div className="subpage-screen">
+            <div className="subpage-banner">
+              <div className="craft-badge" style={{ color: '#4ade80', borderColor: 'rgba(34, 197, 94, 0.3)' }}>💻 DEV TERMINAL</div>
+              <h2 className="subpage-title">Systems & Software</h2>
+              <p className="subpage-desc">Log pull requests, backend deployments, MongoDB schema revisions, and architecture specs.</p>
+            </div>
+
+            <div className="subpage-card">
+              <span className="card-kicker">COMMIT LOG</span>
+              <textarea 
+                value={broadcastText} 
+                onChange={(e) => setBroadcastText(e.target.value)} 
+                placeholder="Log engineering sprint details (e.g., Built mobile drilldown navigation routes, connected live WebSocket telemetry)..." 
+                className="subpage-textarea" 
+              />
+              <div className="subpage-action-row">
+                <label className="file-pick-cta">
+                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
+                  💻 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Screenshot / Code Patch'}</span>
+                </label>
+                <button onClick={handleBroadcast('Systems')} className="subpage-primary-btn">
+                  Commit Sprint
                 </button>
               </div>
             </div>
@@ -389,17 +460,17 @@ export default function MobileWorkspaceDeck() {
         {activeScreen === 'directives' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
-              <span className="subpage-kicker">EXECUTION LOG</span>
-              <h2 className="subpage-title">Directives & Milestones</h2>
-              <p className="subpage-desc">Set clear deliverables for each timeframe. Check them off as you complete work.</p>
+              <div className="craft-badge" style={{ color: '#c084fc', borderColor: 'rgba(168, 85, 247, 0.3)' }}>🎯 DIRECTIVES</div>
+              <h2 className="subpage-title">Targets & Checklists</h2>
+              <p className="subpage-desc">Set operational milestones. Completed goals synchronize to your mentor's live overview.</p>
             </div>
 
             <div className="subpage-card">
-              <span className="card-kicker">ADD DIRECTIVE</span>
+              <span className="card-kicker">LAUNCH NEW TARGET</span>
               <input 
                 value={newMission} 
                 onChange={(e) => setNewMission(e.target.value)} 
-                placeholder="What milestone are we manifesting?" 
+                placeholder={`Target for ${userTalent}...`} 
                 className="subpage-input" 
               />
               <div className="subpage-inline-row">
@@ -413,7 +484,7 @@ export default function MobileWorkspaceDeck() {
                   <option value="monthly">Monthly Milestone</option>
                   <option value="yearly">Horizon Target</option>
                 </select>
-                <button onClick={handleCreateDirective('Directive')} className="subpage-primary-btn">
+                <button onClick={handleCreateDirective('Target')} className="subpage-primary-btn">
                   Launch
                 </button>
               </div>
@@ -433,7 +504,7 @@ export default function MobileWorkspaceDeck() {
 
             <div className="subpage-tasks-stack">
               {missionsList.filter(item => item.timeframe === activeTab).length === 0 ? (
-                <div className="empty-subpage-state">No targets active in this horizon.</div>
+                <div className="empty-subpage-state">No targets active in this horizon. Add one above.</div>
               ) : (
                 missionsList.filter(item => item.timeframe === activeTab).map((item) => (
                   <div 
@@ -463,26 +534,26 @@ export default function MobileWorkspaceDeck() {
         {activeScreen === 'mentorship' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
-              <span className="subpage-kicker">ALLIANCE NETWORK</span>
-              <h2 className="subpage-title">Mentorship Bridge</h2>
-              <p className="subpage-desc">Connect directly to an industry mentor for real-time progress oversight.</p>
+              <div className="craft-badge" style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)' }}>🤝 ALLIANCE BRIDGE</div>
+              <h2 className="subpage-title">Mentorship Pipeline</h2>
+              <p className="subpage-desc">Bridge directly with a seasoned expert in your craft for regular reviews and directive guidance.</p>
             </div>
 
             {userProfile?.partnerEmail ? (
               <div className="subpage-card">
-                <span className="card-kicker">ACTIVE MENTOR</span>
+                <span className="card-kicker">LINKED ALLIANCE MENTOR</span>
                 <div className="mentor-live-row">
                   <div className="mentor-crest">{userProfile.partnerEmail[0].toUpperCase()}</div>
                   <div>
                     <h3 className="mentor-email-text">{userProfile.partnerEmail}</h3>
-                    <span className="mentor-live-status">Direct Bridge Synchronized</span>
+                    <span className="mentor-live-status">Direct Review Synchronized</span>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="subpage-card">
                 <span className="card-kicker">INVITE INDUSTRY MENTOR</span>
-                <p className="card-desc">Enter your mentor's email to bridge their terminal to your progress stream.</p>
+                <p className="card-desc">Enter your mentor's email to establish a secure feedback and task review pipeline.</p>
                 <input 
                   value={partnerEmail} 
                   onChange={(e) => setPartnerEmail(e.target.value)} 
@@ -490,7 +561,7 @@ export default function MobileWorkspaceDeck() {
                   className="subpage-input" 
                 />
                 <button onClick={linkPartner} disabled={isLinking} className="subpage-primary-btn" style={{ width: '100%', marginTop: '6px' }}>
-                  {isLinking ? 'Sending Transmission...' : 'Send Mentorship Invitation'}
+                  {isLinking ? 'Transmitting Bridge Request...' : 'Send Mentorship Invitation'}
                 </button>
               </div>
             )}
@@ -499,7 +570,7 @@ export default function MobileWorkspaceDeck() {
 
       </main>
 
-      {/* Persistent Bottom Nav */}
+      {/* PERSISTENT BOTTOM NAVIGATION */}
       <BottomNav hasNotification={!!userProfile?.incomingRequest} />
 
       <style jsx global>{`
@@ -511,35 +582,53 @@ export default function MobileWorkspaceDeck() {
           letter-spacing: -0.01em;
         }
 
-        /* Nav Header */
+        /* Top Header Bar */
         .mobile-nav-bar {
           position: sticky;
           top: 0;
-          background: rgba(8, 8, 10, 0.9);
+          background: rgba(8, 8, 10, 0.92);
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
           z-index: 100;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 14px 18px;
+          padding: 12px 16px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .hub-eyebrow {
-          font-size: 0.55rem;
+
+        /* Nav Profile Avatar Group */
+        .nav-profile-header-group { display: flex; align-items: center; }
+        .nav-avatar-pill {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: transparent;
+          border: none;
+          padding: 0;
+          cursor: pointer;
+          text-align: left;
+        }
+        .avatar-circle {
+          width: 38px;
+          height: 38px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #6366f1, #a855f7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.95rem;
           font-weight: 800;
-          letter-spacing: 1.5px;
-          color: #818cf8;
-          font-family: monospace;
-          display: block;
+          color: #ffffff;
+          border: 2px solid rgba(255, 255, 255, 0.15);
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+          cursor: pointer;
         }
-        .hub-main-heading {
-          font-size: 1.15rem;
-          font-weight: 900;
-          letter-spacing: -0.5px;
-          margin: 2px 0 0 0;
-          color: #fff;
-        }
+        .avatar-small { width: 32px; height: 32px; font-size: 0.8rem; }
+        .avatar-meta { display: flex; flex-direction: column; }
+        .avatar-user-name { font-size: 0.9rem; font-weight: 800; color: #ffffff; }
+        .avatar-subtext { font-size: 0.65rem; color: #818cf8; font-weight: 600; }
+
         .hub-back-trigger {
           display: flex;
           align-items: center;
@@ -553,6 +642,7 @@ export default function MobileWorkspaceDeck() {
         }
         .back-arrow { font-size: 1.4rem; line-height: 1; }
 
+        .nav-header-right { display: flex; align-items: center; gap: 8px; }
         .hub-mentor-badge {
           display: flex;
           align-items: center;
@@ -571,10 +661,52 @@ export default function MobileWorkspaceDeck() {
         .mobile-view-container {
           max-width: 500px;
           margin: 0 auto;
-          padding: 16px 14px 100px 14px;
+          padding: 14px 14px 100px 14px;
         }
 
-        /* Summary Card */
+        /* Talent Hero Card */
+        .talent-hero-card {
+          background: linear-gradient(135deg, #13131c, #1a172c);
+          border: 1px solid rgba(99, 102, 241, 0.25);
+          border-radius: 18px;
+          padding: 18px;
+          margin-bottom: 16px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+        .talent-hero-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .talent-tag {
+          font-size: 0.58rem;
+          font-weight: 800;
+          letter-spacing: 1.5px;
+          color: #818cf8;
+          font-family: monospace;
+        }
+        .talent-switch-btn {
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #a1a1aa;
+          font-size: 0.65rem;
+          font-weight: 700;
+          padding: 3px 8px;
+          border-radius: 10px;
+          cursor: pointer;
+        }
+        .talent-hero-title { font-size: 1.35rem; font-weight: 900; color: #fff; margin: 0 0 6px 0; }
+        .talent-hero-desc { font-size: 0.76rem; color: #a1a1aa; line-height: 1.45; margin: 0 0 14px 0; }
+        .talent-enter-btn {
+          background: #6366f1;
+          color: #fff;
+          border: none;
+          padding: 10px 18px;
+          border-radius: 10px;
+          font-size: 0.8rem;
+          font-weight: 800;
+          cursor: pointer;
+          transition: transform 0.15s;
+        }
+        .talent-enter-btn:active { transform: scale(0.98); }
+
+        /* Summary Metric Card */
         .hub-summary-card {
           display: flex;
           align-items: center;
@@ -590,7 +722,7 @@ export default function MobileWorkspaceDeck() {
         .summary-tag { font-size: 0.58rem; font-weight: 800; color: #71717a; text-transform: uppercase; margin-top: 2px; }
         .summary-line { width: 1px; height: 26px; background: rgba(255, 255, 255, 0.06); }
 
-        /* Hub Menu Rows */
+        /* Menu Rows */
         .hub-list-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
         .hub-section-label {
           font-size: 0.6rem;
@@ -632,8 +764,18 @@ export default function MobileWorkspaceDeck() {
         /* Sub-Pages Style */
         .subpage-screen { display: flex; flex-direction: column; gap: 14px; }
         .subpage-banner { margin-bottom: 4px; }
-        .subpage-kicker { font-size: 0.58rem; font-weight: 800; color: #818cf8; font-family: monospace; letter-spacing: 1.2px; }
-        .subpage-title { font-size: 1.3rem; font-weight: 900; color: #fff; margin: 2px 0 4px 0; }
+        .craft-badge {
+          display: inline-block;
+          font-size: 0.58rem;
+          font-weight: 800;
+          font-family: monospace;
+          letter-spacing: 1px;
+          border: 1px solid;
+          padding: 2px 8px;
+          border-radius: 6px;
+          margin-bottom: 6px;
+        }
+        .subpage-title { font-size: 1.3rem; font-weight: 900; color: #fff; margin: 0 0 4px 0; }
         .subpage-desc { font-size: 0.78rem; color: #71717a; margin: 0; line-height: 1.4; }
 
         .subpage-card {

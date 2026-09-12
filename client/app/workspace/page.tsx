@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import BottomNav from '../../components/BottomNav';
@@ -19,34 +19,72 @@ interface MissionItem {
   title: string;
   timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly';
   status: 'active' | 'completed';
+  scheduledTime?: string; // e.g. "14:30"
 }
 
-type ScreenMode = 'hub' | 'music' | 'enterprise' | 'systems' | 'visual' | 'directives' | 'mentorship';
+interface ScheduledCall {
+  mentorEmail: string;
+  scheduledDateTime: string;
+  topic: string;
+}
+
+type ScreenMode = 'hub' | 'craft_studio' | 'directives' | 'mentorship';
 
 export default function MobileWorkspaceDeck() {
   const router = useRouter();
 
-  // Active Screen Navigation State
+  // Navigation Screen State
   const [activeScreen, setActiveScreen] = useState<ScreenMode>('hub');
 
-  // Backend Data States
+  // Backend States
   const [missionsList, setMissionsList] = useState<MissionItem[]>([]);
   const [newMission, setNewMission] = useState("");
+  const [missionTime, setMissionTime] = useState("");
   const [timeframe, setTimeframe] = useState("daily");
   const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
 
-  // Mentorship State
+  // Mentorship & Call State
   const [partnerEmail, setPartnerEmail] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [scheduledCall, setScheduledCall] = useState<ScheduledCall | null>(null);
+  const [callDateTime, setCallDateTime] = useState('');
+  const [callTopic, setCallTopic] = useState('');
+  const [isCalling, setIsCalling] = useState(false);
 
-  // User Primary Craft / Talent Specialization
+  // PA Reminder Alarm State
+  const [activeAlarmTask, setActiveAlarmTask] = useState<MissionItem | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Locked User Primary Craft
   const [userTalent, setUserTalent] = useState<string>('Music Architecture');
 
-  // Studio Logs State
+  // Studio Logs
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]); 
   const [broadcastText, setBroadcastText] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'partner' | 'public'>('partner');
+
+  // Play audio chime for PA alarms & Mentor calls
+  const playRingChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 note
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3); // A5 note
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {
+      console.warn("Audio alarm autoplay requires initial user interaction:", e);
+    }
+  };
 
   const fetchMissions = async () => {
     const email = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
@@ -75,25 +113,75 @@ export default function MobileWorkspaceDeck() {
   useEffect(() => {
     fetchProfile();
     fetchMissions();
+
+    // Check saved mentor call
+    const savedCall = localStorage.getItem('v26ScheduledCall');
+    if (savedCall) {
+      try { setScheduledCall(JSON.parse(savedCall)); } catch (e) {}
+    }
   }, []);
 
-  const handleCreateDirective = (prefix: string) => async () => {
+  // PA Reminder & Call Monitoring Timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const currentHours = String(now.getHours()).padStart(2, '0');
+      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+
+      // Check task reminders
+      missionsList.forEach(m => {
+        if (m.status === 'active' && m.scheduledTime === currentTimeStr) {
+          const alertedKey = `alerted_${m._id}_${currentTimeStr}`;
+          if (!sessionStorage.getItem(alertedKey)) {
+            sessionStorage.setItem(alertedKey, 'true');
+            playRingChime();
+            setActiveAlarmTask(m);
+          }
+        }
+      });
+
+      // Check scheduled mentor calls
+      if (scheduledCall && !isCalling) {
+        const callTime = new Date(scheduledCall.scheduledDateTime).getTime();
+        const diff = Math.abs(now.getTime() - callTime);
+        // Rings if within 1 minute of scheduled time
+        if (diff < 60000) {
+          const callKey = `call_alerted_${scheduledCall.scheduledDateTime}`;
+          if (!sessionStorage.getItem(callKey)) {
+            sessionStorage.setItem(callKey, 'true');
+            playRingChime();
+            setIsCalling(true);
+          }
+        }
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [missionsList, scheduledCall, isCalling]);
+
+  const handleCreateDirective = async () => {
     if (!newMission.trim()) return;
     const email = localStorage.getItem('v26UserEmail');
+    const formattedTitle = missionTime 
+      ? `⏰ ${missionTime} • ${newMission.trim()}`
+      : newMission.trim();
+
     try {
-      await axios.post('https://v26.onrender.com/api/missions/create-mission', {
+      const res = await axios.post('https://v26.onrender.com/api/missions/create-mission', {
         creatorEmail: email,
-        title: `[${prefix}] ${newMission}`,
-        timeframe: timeframe
+        title: formattedTitle,
+        timeframe
       });
       setNewMission(""); 
+      setMissionTime("");
       fetchMissions(); 
     } catch (err) { console.error(err); }
   };
 
   const handleDeleteMission = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
-    if (!window.confirm("Delete this milestone target?")) return;
+    if (!window.confirm("Remove this directive?")) return;
     try {
       await axios.delete(`https://v26.onrender.com/api/missions/delete/${id}`);
       setMissionsList(prev => prev.filter(m => m._id !== id));
@@ -120,12 +208,25 @@ export default function MobileWorkspaceDeck() {
     try {
       setIsLinking(true);
       await axios.put('https://v26.onrender.com/api/auth/invite-partner', { myEmail, partnerEmail });
-      alert("Mentorship Bridge Request Transmitted!");
+      alert("Mentorship Bridge Transmitted!");
       setPartnerEmail('');
       fetchProfile();
     } catch (err) { 
       alert("Mentor frequency not detected."); 
     } finally { setIsLinking(false); }
+  };
+
+  const handleScheduleCall = () => {
+    if (!callDateTime) return alert("Select date and time for the review call.");
+    const callData: ScheduledCall = {
+      mentorEmail: userProfile?.partnerEmail || "mentor@v26.io",
+      scheduledDateTime: callDateTime,
+      topic: callTopic.trim() || "Milestone & Craft Review"
+    };
+    setScheduledCall(callData);
+    localStorage.setItem('v26ScheduledCall', JSON.stringify(callData));
+    alert(`Synchronized Review Call set for ${new Date(callDateTime).toLocaleString()}. Both terminals will ring at call time.`);
+    setCallTopic('');
   };
 
   const handleBroadcast = (domainName: string) => async () => {
@@ -146,36 +247,29 @@ export default function MobileWorkspaceDeck() {
     } catch (err) { console.error(err); }
   };
 
-  const setPrimaryTalent = (t: string) => {
-    setUserTalent(t);
-    localStorage.setItem('v26UserTalent', t);
-  };
-
   const userInitial = (userProfile?.displayName || userProfile?.email || 'U')[0].toUpperCase();
 
   return (
     <div className="mobile-hub-root">
 
-      {/* TOP NATIVE APP HEADER WITH PROFILE AVATAR */}
+      {/* TOP HEADER WITH PROFILE AVATAR (NO // SLATE TEXT) */}
       <header className="mobile-nav-bar">
         {activeScreen === 'hub' ? (
-          <div className="nav-profile-header-group">
-            <button 
-              className="nav-avatar-pill" 
-              onClick={() => router.push('/profile')}
-              aria-label="Profile Settings"
-            >
-              <div className="avatar-circle">{userInitial}</div>
-              <div className="avatar-meta">
-                <span className="avatar-user-name">{userProfile?.displayName || userProfile?.email?.split('@')[0] || 'Creator'}</span>
-                <span className="avatar-subtext">View Profile ›</span>
-              </div>
-            </button>
-          </div>
+          <button 
+            className="nav-avatar-pill" 
+            onClick={() => router.push('/profile')}
+            aria-label="Profile Settings"
+          >
+            <div className="avatar-circle">{userInitial}</div>
+            <div className="avatar-meta">
+              <span className="avatar-user-name">{userProfile?.displayName || userProfile?.email?.split('@')[0] || 'Creator'}</span>
+              <span className="avatar-craft-tag">{userTalent}</span>
+            </div>
+          </button>
         ) : (
           <button className="hub-back-trigger" onClick={() => setActiveScreen('hub')}>
             <span className="back-arrow">‹</span>
-            <span>Hub</span>
+            <span>Workspace</span>
           </button>
         )}
 
@@ -198,47 +292,32 @@ export default function MobileWorkspaceDeck() {
       <main className="mobile-view-container">
 
         {/* ========================================================
-            1. MAIN HUB MENU SCREEN (PERSONALIZED TO TALENT)
+            1. MAIN HUB SCREEN (LOCKED TO USER'S CRAFT)
         ======================================================== */}
         {activeScreen === 'hub' && (
           <div className="drilldown-home">
             
-            {/* TALENT-CUSTOMIZED DEDICATED SUITE HERO CARD */}
+            {/* LOCKED DEDICATED CRAFT STUDIO (NO SWITCH BUTTON) */}
             <div className="talent-hero-card">
               <div className="talent-hero-top">
-                <span className="talent-tag">DEDICATED CRAFT STUDIO</span>
-                <button 
-                  className="talent-switch-btn" 
-                  onClick={() => {
-                    const talents = ['Music Architecture', 'Visual Arts & Design', 'Enterprise & Strategy', 'Systems & Software'];
-                    const next = talents[(talents.indexOf(userTalent) + 1) % talents.length];
-                    setPrimaryTalent(next);
-                  }}
-                >
-                  Switch Craft ▾
-                </button>
+                <span className="talent-tag">ASSIGNED STUDIO ENVIRONMENT</span>
               </div>
               <h2 className="talent-hero-title">{userTalent}</h2>
               <p className="talent-hero-desc">
-                {userTalent === 'Music Architecture' && "Your custom music suite: stem submissions, audio arrangement reviews, and FL mixer cues."}
-                {userTalent === 'Visual Arts & Design' && "Your custom visual studio: moodboards, 3D renders, palette systems, and artwork reviews."}
-                {userTalent === 'Enterprise & Strategy' && "Your executive suite: pitch deck drafts, valuation models, and venture mentor oversight."}
-                {userTalent === 'Systems & Software' && "Your engineering terminal: git branches, system architecture blueprints, and sprint commits."}
+                {userTalent.toLowerCase().includes('music') && "Your dedicated audio studio: submit stems, arrangements, mixer routing, and master reviews."}
+                {userTalent.toLowerCase().includes('art') && "Your dedicated visual studio: manage brand design systems, 3D artwork, and client mockups."}
+                {userTalent.toLowerCase().includes('enterprise') && "Your executive suite: pitch deck submissions, venture models, and billionaire mentor advisory."}
+                {userTalent.toLowerCase().includes('system') && "Your engineering terminal: git branches, deployment logs, and architecture blueprints."}
               </p>
               <button 
                 className="talent-enter-btn"
-                onClick={() => {
-                  if (userTalent === 'Music Architecture') setActiveScreen('music');
-                  else if (userTalent === 'Visual Arts & Design') setActiveScreen('visual');
-                  else if (userTalent === 'Enterprise & Strategy') setActiveScreen('enterprise');
-                  else setActiveScreen('systems');
-                }}
+                onClick={() => setActiveScreen('craft_studio')}
               >
-                Launch {userTalent.split(' ')[0]} Studio →
+                Launch Studio Desk →
               </button>
             </div>
 
-            {/* Velocity Metrics Glance */}
+            {/* PA Daily Goal Velocity Glance */}
             <div className="hub-summary-card" onClick={() => setActiveScreen('directives')}>
               <div className="summary-col">
                 <span className="summary-number" style={{ color: '#6366f1' }}>{calculateProgress('daily')}%</span>
@@ -247,65 +326,35 @@ export default function MobileWorkspaceDeck() {
               <div className="summary-line" />
               <div className="summary-col">
                 <span className="summary-number" style={{ color: '#22c55e' }}>{calculateProgress('weekly')}%</span>
-                <span className="summary-tag">Weekly Targets</span>
+                <span className="summary-tag">Weekly Goals</span>
               </div>
               <div className="summary-line" />
               <div className="summary-col">
-                <span className="summary-number">{missionsList.length}</span>
-                <span className="summary-tag">Directives</span>
+                <span className="summary-number">{missionsList.filter(m => m.status === 'active').length}</span>
+                <span className="summary-tag">Pending Targets</span>
               </div>
             </div>
 
-            {/* SECTOR 1: WORKSPACE DOMAINS */}
+            {/* Hub Menu List */}
             <div className="hub-list-section">
-              <span className="hub-section-label">PRODUCTION SUITES</span>
+              <span className="hub-section-label">OPERATIONS & MENTORSHIP</span>
 
-              <div className="hub-menu-cell" onClick={() => setActiveScreen('music')}>
-                <div className="hub-cell-icon" style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8' }}>🎵</div>
+              <div className="hub-menu-cell" onClick={() => setActiveScreen('craft_studio')}>
+                <div className="hub-cell-icon" style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8' }}>
+                  {userTalent.toLowerCase().includes('music') ? '🎵' : userTalent.toLowerCase().includes('art') ? '🎨' : userTalent.toLowerCase().includes('enterprise') ? '💼' : '💻'}
+                </div>
                 <div className="hub-cell-info">
-                  <span className="hub-cell-title">Music Architecture</span>
-                  <span className="hub-cell-subtitle">Stems, mixdown reviews, and audio drops</span>
+                  <span className="hub-cell-title">{userTalent} Desk</span>
+                  <span className="hub-cell-subtitle">Log session work, drop artifacts & review</span>
                 </div>
                 <span className="hub-cell-arrow">›</span>
               </div>
-
-              <div className="hub-menu-cell" onClick={() => setActiveScreen('visual')}>
-                <div className="hub-cell-icon" style={{ background: 'rgba(236, 72, 153, 0.12)', color: '#f472b6' }}>🎨</div>
-                <div className="hub-cell-info">
-                  <span className="hub-cell-title">Visual Arts & Design</span>
-                  <span className="hub-cell-subtitle">Brand design, 3D renders, and visual assets</span>
-                </div>
-                <span className="hub-cell-arrow">›</span>
-              </div>
-
-              <div className="hub-menu-cell" onClick={() => setActiveScreen('enterprise')}>
-                <div className="hub-cell-icon" style={{ background: 'rgba(234, 179, 8, 0.12)', color: '#facc15' }}>💼</div>
-                <div className="hub-cell-info">
-                  <span className="hub-cell-title">Enterprise & Strategy</span>
-                  <span className="hub-cell-subtitle">Pitch decks, financial models, and executive logs</span>
-                </div>
-                <span className="hub-cell-arrow">›</span>
-              </div>
-
-              <div className="hub-menu-cell" onClick={() => setActiveScreen('systems')}>
-                <div className="hub-cell-icon" style={{ background: 'rgba(34, 197, 94, 0.12)', color: '#4ade80' }}>💻</div>
-                <div className="hub-cell-info">
-                  <span className="hub-cell-title">Systems & Software</span>
-                  <span className="hub-cell-subtitle">Engineering sprints, architecture and PR commits</span>
-                </div>
-                <span className="hub-cell-arrow">›</span>
-              </div>
-            </div>
-
-            {/* SECTOR 2: DIRECTIVES & ALLIANCE */}
-            <div className="hub-list-section">
-              <span className="hub-section-label">COLLABORATION & REVIEW</span>
 
               <div className="hub-menu-cell" onClick={() => setActiveScreen('directives')}>
                 <div className="hub-cell-icon" style={{ background: 'rgba(168, 85, 247, 0.12)', color: '#c084fc' }}>🎯</div>
                 <div className="hub-cell-info">
-                  <span className="hub-cell-title">Directives & Milestones</span>
-                  <span className="hub-cell-subtitle">Actionable sprint checklists & velocity checkoffs</span>
+                  <span className="hub-cell-title">PA Directives & Time Reminders</span>
+                  <span className="hub-cell-subtitle">Scheduled alarms, daily checklist & completion %</span>
                 </div>
                 <span className="hub-cell-badge">{missionsList.filter(m => m.status === 'active').length} active</span>
                 <span className="hub-cell-arrow">›</span>
@@ -314,9 +363,9 @@ export default function MobileWorkspaceDeck() {
               <div className="hub-menu-cell" onClick={() => setActiveScreen('mentorship')}>
                 <div className="hub-cell-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#f87171' }}>🤝</div>
                 <div className="hub-cell-info">
-                  <span className="hub-cell-title">Mentorship Pipeline</span>
+                  <span className="hub-cell-title">Mentorship & Scheduled Calls</span>
                   <span className="hub-cell-subtitle">
-                    {userProfile?.partnerEmail ? userProfile.partnerEmail : 'Link industry mentor or mentee'}
+                    {scheduledCall ? `Call set: ${new Date(scheduledCall.scheduledDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : (userProfile?.partnerEmail || 'Link your mentor')}
                   </span>
                 </div>
                 <span className="hub-cell-arrow">›</span>
@@ -327,31 +376,31 @@ export default function MobileWorkspaceDeck() {
         )}
 
         {/* ========================================================
-            2. MUSIC ARCHITECTURE SUB-PAGE (AUDIO VIBE)
+            2. PRIMARY CRAFT WORKSPACE SUB-PAGE
         ======================================================== */}
-        {activeScreen === 'music' && (
+        {activeScreen === 'craft_studio' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
-              <div className="craft-badge" style={{ color: '#818cf8', borderColor: 'rgba(99, 102, 241, 0.3)' }}>🎵 AUDIO STUDIO</div>
-              <h2 className="subpage-title">Music Architecture</h2>
-              <p className="subpage-desc">Share arrangement stems, mixdown balances, and DAW session notes with your mentor.</p>
+              <span className="craft-badge">{userTalent.toUpperCase()} ENVIRONMENT</span>
+              <h2 className="subpage-title">{userTalent}</h2>
+              <p className="subpage-desc">Share arrangement stems, artifacts, or business assets with your mentor for immediate feedback.</p>
             </div>
 
             <div className="subpage-card">
-              <span className="card-kicker">SESSION LOG // FL & MIXDOWN</span>
+              <span className="card-kicker">SESSION LOG</span>
               <textarea 
                 value={broadcastText} 
                 onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Log session notes (e.g., Mastered lead vocals on verse 1, sidechained 808 to kick, balanced master limiter)..." 
+                placeholder={`Log session deliverables for ${userTalent}...`} 
                 className="subpage-textarea" 
               />
               <div className="subpage-action-row">
                 <label className="file-pick-cta">
                   <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  🎵 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Upload Stems / Audio Demo (.mp3, .wav)'}</span>
+                  📁 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Stems / Media Files'}</span>
                 </label>
-                <button onClick={handleBroadcast('Music')} className="subpage-primary-btn">
-                  Commit Track
+                <button onClick={handleBroadcast(userTalent)} className="subpage-primary-btn">
+                  Commit Work
                 </button>
               </div>
             </div>
@@ -359,121 +408,33 @@ export default function MobileWorkspaceDeck() {
         )}
 
         {/* ========================================================
-            3. VISUAL ARTS & DESIGN SUB-PAGE (CANVAS VIBE)
-        ======================================================== */}
-        {activeScreen === 'visual' && (
-          <div className="subpage-screen">
-            <div className="subpage-banner">
-              <div className="craft-badge" style={{ color: '#f472b6', borderColor: 'rgba(236, 72, 153, 0.3)' }}>🎨 VISUAL LAB</div>
-              <h2 className="subpage-title">Visual Arts & Design</h2>
-              <p className="subpage-desc">Submit branding assets, 3D character renders, layout mockups, and typography drafts.</p>
-            </div>
-
-            <div className="subpage-card">
-              <span className="card-kicker">CREATIVE ARTIFACT LOG</span>
-              <textarea 
-                value={broadcastText} 
-                onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Describe your design progress (e.g., Crafted visual aesthetic in dark slate, 3D lighting render finalized)..." 
-                className="subpage-textarea" 
-              />
-              <div className="subpage-action-row">
-                <label className="file-pick-cta">
-                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  🖼️ <span>{selectedFiles.length > 0 ? `${selectedFiles.length} artwork(s) loaded` : 'Attach Design Assets / Renders'}</span>
-                </label>
-                <button onClick={handleBroadcast('Visual')} className="subpage-primary-btn">
-                  Commit Artwork
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            4. ENTERPRISE & STRATEGY SUB-PAGE (FOUNDER VIBE)
-        ======================================================== */}
-        {activeScreen === 'enterprise' && (
-          <div className="subpage-screen">
-            <div className="subpage-banner">
-              <div className="craft-badge" style={{ color: '#facc15', borderColor: 'rgba(234, 179, 8, 0.3)' }}>💼 EXECUTIVE ROOM</div>
-              <h2 className="subpage-title">Enterprise & Strategy</h2>
-              <p className="subpage-desc">Review investor decks, unit economics, monetization plans, and growth roadmap with billionaire mentors.</p>
-            </div>
-
-            <div className="subpage-card">
-              <span className="card-kicker">COMMERCIAL MILESTONE LOG</span>
-              <textarea 
-                value={broadcastText} 
-                onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Log enterprise step (e.g., Finalized investor deck slide 4-8, established initial customer validation pipeline)..." 
-                className="subpage-textarea" 
-              />
-              <div className="subpage-action-row">
-                <label className="file-pick-cta">
-                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  📄 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Deck (.pdf) / Sheet'}</span>
-                </label>
-                <button onClick={handleBroadcast('Enterprise')} className="subpage-primary-btn">
-                  Submit Deck
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            5. SYSTEMS & SOFTWARE SUB-PAGE (TERMINAL VIBE)
-        ======================================================== */}
-        {activeScreen === 'systems' && (
-          <div className="subpage-screen">
-            <div className="subpage-banner">
-              <div className="craft-badge" style={{ color: '#4ade80', borderColor: 'rgba(34, 197, 94, 0.3)' }}>💻 DEV TERMINAL</div>
-              <h2 className="subpage-title">Systems & Software</h2>
-              <p className="subpage-desc">Log pull requests, backend deployments, MongoDB schema revisions, and architecture specs.</p>
-            </div>
-
-            <div className="subpage-card">
-              <span className="card-kicker">COMMIT LOG</span>
-              <textarea 
-                value={broadcastText} 
-                onChange={(e) => setBroadcastText(e.target.value)} 
-                placeholder="Log engineering sprint details (e.g., Built mobile drilldown navigation routes, connected live WebSocket telemetry)..." 
-                className="subpage-textarea" 
-              />
-              <div className="subpage-action-row">
-                <label className="file-pick-cta">
-                  <input type="file" multiple style={{ display: 'none' }} onChange={(e) => setSelectedFiles([...selectedFiles, ...Array.from(e.target.files || [])])} />
-                  💻 <span>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) attached` : 'Attach Screenshot / Code Patch'}</span>
-                </label>
-                <button onClick={handleBroadcast('Systems')} className="subpage-primary-btn">
-                  Commit Sprint
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            6. DIRECTIVES & MILESTONES SUB-PAGE
+            3. PA DIRECTIVES & TIME-BASED REMINDERS
         ======================================================== */}
         {activeScreen === 'directives' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
-              <div className="craft-badge" style={{ color: '#c084fc', borderColor: 'rgba(168, 85, 247, 0.3)' }}>🎯 DIRECTIVES</div>
-              <h2 className="subpage-title">Targets & Checklists</h2>
-              <p className="subpage-desc">Set operational milestones. Completed goals synchronize to your mentor's live overview.</p>
+              <span className="craft-badge" style={{ color: '#c084fc', borderColor: 'rgba(168, 85, 247, 0.3)' }}>PERSONAL ASSISTANT</span>
+              <h2 className="subpage-title">Directives & Time Reminders</h2>
+              <p className="subpage-desc">Set milestones with exact times. When the time arrives, your terminal will ring and remind you to complete it.</p>
             </div>
 
+            {/* Launch Target with Time Input */}
             <div className="subpage-card">
-              <span className="card-kicker">LAUNCH NEW TARGET</span>
+              <span className="card-kicker">SCHEDULE GOAL / MEETING REMINDER</span>
               <input 
                 value={newMission} 
                 onChange={(e) => setNewMission(e.target.value)} 
-                placeholder={`Target for ${userTalent}...`} 
+                placeholder="Task (e.g., Attend strategy sync, mix vocal tracks, meet mentor)..." 
                 className="subpage-input" 
               />
               <div className="subpage-inline-row">
+                <input 
+                  type="time" 
+                  value={missionTime} 
+                  onChange={(e) => setMissionTime(e.target.value)} 
+                  className="subpage-time-input" 
+                  title="Execution reminder time"
+                />
                 <select 
                   value={timeframe} 
                   onChange={(e) => setTimeframe(e.target.value)} 
@@ -484,8 +445,8 @@ export default function MobileWorkspaceDeck() {
                   <option value="monthly">Monthly Milestone</option>
                   <option value="yearly">Horizon Target</option>
                 </select>
-                <button onClick={handleCreateDirective('Target')} className="subpage-primary-btn">
-                  Launch
+                <button onClick={handleCreateDirective} className="subpage-primary-btn">
+                  Set Task
                 </button>
               </div>
             </div>
@@ -497,14 +458,14 @@ export default function MobileWorkspaceDeck() {
                   onClick={() => setActiveTab(t)} 
                   className={`tab-btn ${activeTab === t ? 'tab-active' : ''}`}
                 >
-                  {t}
+                  {t} ({calculateProgress(t)}%)
                 </button>
               ))}
             </div>
 
             <div className="subpage-tasks-stack">
               {missionsList.filter(item => item.timeframe === activeTab).length === 0 ? (
-                <div className="empty-subpage-state">No targets active in this horizon. Add one above.</div>
+                <div className="empty-subpage-state">No {activeTab} directives scheduled.</div>
               ) : (
                 missionsList.filter(item => item.timeframe === activeTab).map((item) => (
                   <div 
@@ -529,46 +490,152 @@ export default function MobileWorkspaceDeck() {
         )}
 
         {/* ========================================================
-            7. MENTORSHIP PIPELINE SUB-PAGE
+            4. MENTORSHIP & SYNCHRONIZED CALL ROOM
         ======================================================== */}
         {activeScreen === 'mentorship' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
-              <div className="craft-badge" style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)' }}>🤝 ALLIANCE BRIDGE</div>
-              <h2 className="subpage-title">Mentorship Pipeline</h2>
-              <p className="subpage-desc">Bridge directly with a seasoned expert in your craft for regular reviews and directive guidance.</p>
+              <span className="craft-badge" style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)' }}>ALLIANCE NETWORK</span>
+              <h2 className="subpage-title">Mentor Review & Calls</h2>
+              <p className="subpage-desc">Schedule 1-on-1 review sessions. Both devices ring simultaneously at the appointed call time.</p>
             </div>
 
-            {userProfile?.partnerEmail ? (
-              <div className="subpage-card">
-                <span className="card-kicker">LINKED ALLIANCE MENTOR</span>
+            {/* Mentor Overview Card */}
+            <div className="subpage-card">
+              <span className="card-kicker">VERIFIED MENTOR BRIDGE</span>
+              {userProfile?.partnerEmail ? (
                 <div className="mentor-live-row">
                   <div className="mentor-crest">{userProfile.partnerEmail[0].toUpperCase()}</div>
                   <div>
                     <h3 className="mentor-email-text">{userProfile.partnerEmail}</h3>
-                    <span className="mentor-live-status">Direct Review Synchronized</span>
+                    <span className="mentor-live-status">Direct Bridge Active</span>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="subpage-card">
-                <span className="card-kicker">INVITE INDUSTRY MENTOR</span>
-                <p className="card-desc">Enter your mentor's email to establish a secure feedback and task review pipeline.</p>
-                <input 
-                  value={partnerEmail} 
-                  onChange={(e) => setPartnerEmail(e.target.value)} 
-                  placeholder="Mentor email address..." 
-                  className="subpage-input" 
-                />
-                <button onClick={linkPartner} disabled={isLinking} className="subpage-primary-btn" style={{ width: '100%', marginTop: '6px' }}>
-                  {isLinking ? 'Transmitting Bridge Request...' : 'Send Mentorship Invitation'}
-                </button>
-              </div>
-            )}
+              ) : (
+                <div>
+                  <p className="card-desc">Enter your mentor's email address to connect your workspace.</p>
+                  <input 
+                    value={partnerEmail} 
+                    onChange={(e) => setPartnerEmail(e.target.value)} 
+                    placeholder="Mentor email..." 
+                    className="subpage-input" 
+                  />
+                  <button onClick={linkPartner} disabled={isLinking} className="subpage-primary-btn" style={{ width: '100%', marginTop: '6px' }}>
+                    {isLinking ? 'Sending...' : 'Invite Mentor'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Call Scheduler Card */}
+            <div className="subpage-card">
+              <span className="card-kicker">SCHEDULE SYNCHRONIZED CALL</span>
+              {scheduledCall ? (
+                <div className="scheduled-call-box">
+                  <div className="call-info-row">
+                    <span className="call-icon">📞</span>
+                    <div>
+                      <span className="call-status-tag">CALL SCHEDULED</span>
+                      <h4 className="call-topic-title">{scheduledCall.topic}</h4>
+                      <span className="call-time-display">
+                        ⏰ {new Date(scheduledCall.scheduledDateTime).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="call-actions-row">
+                    <button onClick={() => { playRingChime(); setIsCalling(true); }} className="subpage-primary-btn" style={{ flex: 1 }}>
+                      Simulate Ring / Start Call
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setScheduledCall(null);
+                        localStorage.removeItem('v26ScheduledCall');
+                      }} 
+                      className="call-cancel-btn"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="card-desc">Pick date and time. Both your device and your mentor's device will trigger an audible ring.</p>
+                  <input 
+                    type="datetime-local" 
+                    value={callDateTime} 
+                    onChange={(e) => setCallDateTime(e.target.value)} 
+                    className="subpage-input" 
+                  />
+                  <input 
+                    value={callTopic} 
+                    onChange={(e) => setCallTopic(e.target.value)} 
+                    placeholder="Review topic (e.g. Mastered Album Review, Seed Round Pitch)..." 
+                    className="subpage-input" 
+                  />
+                  <button onClick={handleScheduleCall} className="subpage-primary-btn" style={{ width: '100%', marginTop: '6px' }}>
+                    Schedule Call & Sync Both Terminals
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
       </main>
+
+      {/* PA REMINDER ALARM MODAL */}
+      {activeAlarmTask && (
+        <div className="alarm-modal-backdrop">
+          <div className="alarm-modal-sheet">
+            <div className="alarm-bell-icon">🔔</div>
+            <span className="alarm-subtitle">PERSONAL ASSISTANT DIRECTIVE ALARM</span>
+            <h3 className="alarm-task-title">{activeAlarmTask.title}</h3>
+            <p className="alarm-note">The scheduled execution time for this target has arrived.</p>
+            <div className="alarm-actions">
+              <button 
+                onClick={() => {
+                  togglePlanStatus(activeAlarmTask._id, 'active');
+                  setActiveAlarmTask(null);
+                }} 
+                className="alarm-btn-done"
+              >
+                Mark Done & Update Daily Pace ✓
+              </button>
+              <button onClick={() => setActiveAlarmTask(null)} className="alarm-btn-dismiss">
+                Snooze / Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SYNCHRONIZED CALL INCOMING RING MODAL */}
+      {isCalling && (
+        <div className="alarm-modal-backdrop">
+          <div className="call-ring-sheet">
+            <div className="call-ring-pulse">
+              <span className="ring-icon">📞</span>
+            </div>
+            <span className="call-incoming-tag">SYNCHRONIZED MENTORSHIP CALL</span>
+            <h3 className="call-incoming-mentor">{scheduledCall?.mentorEmail || userProfile?.partnerEmail || "Mentor"}</h3>
+            <p className="call-incoming-topic">{scheduledCall?.topic || "Session Review"}</p>
+            <div className="call-modal-buttons">
+              <button 
+                onClick={() => {
+                  alert("Connecting secure WebRTC audio/video bridge...");
+                  setIsCalling(false);
+                }} 
+                className="call-accept-btn"
+              >
+                Join Call Room
+              </button>
+              <button onClick={() => setIsCalling(false)} className="call-decline-btn">
+                Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PERSISTENT BOTTOM NAVIGATION */}
       <BottomNav hasNotification={!!userProfile?.incomingRequest} />
@@ -582,11 +649,11 @@ export default function MobileWorkspaceDeck() {
           letter-spacing: -0.01em;
         }
 
-        /* Top Header Bar */
+        /* Top Nav Header */
         .mobile-nav-bar {
           position: sticky;
           top: 0;
-          background: rgba(8, 8, 10, 0.92);
+          background: rgba(8, 8, 10, 0.94);
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
           z-index: 100;
@@ -597,8 +664,6 @@ export default function MobileWorkspaceDeck() {
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* Nav Profile Avatar Group */
-        .nav-profile-header-group { display: flex; align-items: center; }
         .nav-avatar-pill {
           display: flex;
           align-items: center;
@@ -622,12 +687,11 @@ export default function MobileWorkspaceDeck() {
           color: #ffffff;
           border: 2px solid rgba(255, 255, 255, 0.15);
           box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
-          cursor: pointer;
         }
-        .avatar-small { width: 32px; height: 32px; font-size: 0.8rem; }
+        .avatar-small { width: 32px; height: 32px; font-size: 0.8rem; cursor: pointer; }
         .avatar-meta { display: flex; flex-direction: column; }
         .avatar-user-name { font-size: 0.9rem; font-weight: 800; color: #ffffff; }
-        .avatar-subtext { font-size: 0.65rem; color: #818cf8; font-weight: 600; }
+        .avatar-craft-tag { font-size: 0.65rem; color: #818cf8; font-weight: 600; }
 
         .hub-back-trigger {
           display: flex;
@@ -673,23 +737,13 @@ export default function MobileWorkspaceDeck() {
           margin-bottom: 16px;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
-        .talent-hero-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .talent-hero-top { margin-bottom: 6px; }
         .talent-tag {
           font-size: 0.58rem;
           font-weight: 800;
           letter-spacing: 1.5px;
           color: #818cf8;
           font-family: monospace;
-        }
-        .talent-switch-btn {
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: #a1a1aa;
-          font-size: 0.65rem;
-          font-weight: 700;
-          padding: 3px 8px;
-          border-radius: 10px;
-          cursor: pointer;
         }
         .talent-hero-title { font-size: 1.35rem; font-weight: 900; color: #fff; margin: 0 0 6px 0; }
         .talent-hero-desc { font-size: 0.76rem; color: #a1a1aa; line-height: 1.45; margin: 0 0 14px 0; }
@@ -702,11 +756,9 @@ export default function MobileWorkspaceDeck() {
           font-size: 0.8rem;
           font-weight: 800;
           cursor: pointer;
-          transition: transform 0.15s;
         }
-        .talent-enter-btn:active { transform: scale(0.98); }
 
-        /* Summary Metric Card */
+        /* Summary Card */
         .hub-summary-card {
           display: flex;
           align-items: center;
@@ -722,7 +774,7 @@ export default function MobileWorkspaceDeck() {
         .summary-tag { font-size: 0.58rem; font-weight: 800; color: #71717a; text-transform: uppercase; margin-top: 2px; }
         .summary-line { width: 1px; height: 26px; background: rgba(255, 255, 255, 0.06); }
 
-        /* Menu Rows */
+        /* Hub Menu Rows */
         .hub-list-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
         .hub-section-label {
           font-size: 0.6rem;
@@ -742,9 +794,8 @@ export default function MobileWorkspaceDeck() {
           border-radius: 14px;
           padding: 14px 16px;
           cursor: pointer;
-          transition: all 0.15s ease;
         }
-        .hub-menu-cell:active { transform: scale(0.98); background: #14141c; }
+        .hub-menu-cell:active { background: #14141c; }
         .hub-cell-icon {
           width: 40px;
           height: 40px;
@@ -770,7 +821,8 @@ export default function MobileWorkspaceDeck() {
           font-weight: 800;
           font-family: monospace;
           letter-spacing: 1px;
-          border: 1px solid;
+          border: 1px solid rgba(99, 102, 241, 0.3);
+          color: #818cf8;
           padding: 2px 8px;
           border-radius: 6px;
           margin-bottom: 6px;
@@ -824,7 +876,17 @@ export default function MobileWorkspaceDeck() {
           box-sizing: border-box;
           margin-bottom: 8px;
         }
-        .subpage-inline-row { display: flex; gap: 8px; }
+        .subpage-inline-row { display: flex; gap: 8px; align-items: center; }
+        .subpage-time-input {
+          background: #14141c;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 10px;
+          padding: 8px 10px;
+          color: #818cf8;
+          font-weight: 700;
+          font-size: 0.8rem;
+          outline: none;
+        }
         .subpage-select {
           flex: 1;
           background: #14141c;
@@ -834,6 +896,7 @@ export default function MobileWorkspaceDeck() {
           color: #a1a1aa;
           font-size: 0.78rem;
           outline: none;
+          height: 38px;
         }
 
         .subpage-tabs-bar {
@@ -848,7 +911,7 @@ export default function MobileWorkspaceDeck() {
           background: transparent;
           border: none;
           color: #71717a;
-          font-size: 0.72rem;
+          font-size: 0.7rem;
           font-weight: 700;
           padding: 6px 0;
           border-radius: 6px;
@@ -868,7 +931,7 @@ export default function MobileWorkspaceDeck() {
           justify-content: space-between;
           cursor: pointer;
         }
-        .task-done { opacity: 0.45; }
+        .task-done { opacity: 0.45; text-decoration: line-through; }
         .task-entry-left { display: flex; align-items: center; gap: 10px; }
         .entry-checkbox {
           width: 18px;
@@ -887,6 +950,7 @@ export default function MobileWorkspaceDeck() {
         .entry-trash-btn { background: transparent; border: none; color: #71717a; cursor: pointer; }
         .empty-subpage-state { text-align: center; color: #52525b; font-size: 0.8rem; padding: 24px 0; }
 
+        /* Mentorship & Call Scheduling */
         .mentor-live-row { display: flex; gap: 12px; align-items: center; }
         .mentor-crest {
           width: 44px;
@@ -902,6 +966,75 @@ export default function MobileWorkspaceDeck() {
         }
         .mentor-email-text { font-size: 0.9rem; font-weight: 800; color: #fff; margin: 0; }
         .mentor-live-status { font-size: 0.72rem; color: #22c55e; }
+
+        .scheduled-call-box { background: #14141c; border-radius: 14px; padding: 14px; border: 1px solid rgba(99, 102, 241, 0.2); }
+        .call-info-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+        .call-icon { font-size: 1.5rem; }
+        .call-status-tag { font-size: 0.58rem; font-weight: 800; color: #22c55e; letter-spacing: 1px; font-family: monospace; display: block; }
+        .call-topic-title { margin: 2px 0; font-size: 0.95rem; font-weight: 800; color: #fff; }
+        .call-time-display { font-size: 0.75rem; color: #818cf8; font-weight: 700; }
+        .call-actions-row { display: flex; gap: 8px; }
+        .call-cancel-btn { background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); color: #71717a; border-radius: 10px; padding: 8px 14px; font-size: 0.75rem; cursor: pointer; }
+
+        /* Alarms & Modals */
+        .alarm-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.85);
+          backdrop-filter: blur(12px);
+          z-index: 10000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .alarm-modal-sheet {
+          background: #14141c;
+          border: 1px solid #6366f1;
+          border-radius: 20px;
+          padding: 24px;
+          width: 100%;
+          max-width: 400px;
+          text-align: center;
+          box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+        }
+        .alarm-bell-icon { font-size: 2.2rem; margin-bottom: 8px; }
+        .alarm-subtitle { font-size: 0.62rem; font-weight: 800; letter-spacing: 1.5px; color: #818cf8; font-family: monospace; display: block; margin-bottom: 6px; }
+        .alarm-task-title { font-size: 1.15rem; font-weight: 900; color: #fff; margin: 0 0 8px 0; }
+        .alarm-note { font-size: 0.78rem; color: #a1a1aa; margin: 0 0 16px 0; }
+        .alarm-actions { display: flex; flex-direction: column; gap: 8px; }
+        .alarm-btn-done { background: #22c55e; color: #000; border: none; border-radius: 10px; padding: 12px; font-weight: 800; font-size: 0.85rem; cursor: pointer; }
+        .alarm-btn-dismiss { background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); color: #71717a; border-radius: 10px; padding: 10px; font-size: 0.78rem; cursor: pointer; }
+
+        /* Call Ringing Sheet */
+        .call-ring-sheet {
+          background: #13131c;
+          border: 1px solid #22c55e;
+          border-radius: 24px;
+          padding: 28px 20px;
+          width: 100%;
+          max-width: 380px;
+          text-align: center;
+          box-shadow: 0 0 35px rgba(34, 197, 94, 0.25);
+        }
+        .call-ring-pulse {
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: rgba(34, 197, 94, 0.15);
+          border: 2px solid #22c55e;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 12px auto;
+        }
+        .ring-icon { font-size: 1.6rem; }
+        .call-incoming-tag { font-size: 0.6rem; font-weight: 800; letter-spacing: 1.5px; color: #22c55e; font-family: monospace; display: block; margin-bottom: 4px; }
+        .call-incoming-mentor { font-size: 1.15rem; font-weight: 900; color: #fff; margin: 0 0 4px 0; }
+        .call-incoming-topic { font-size: 0.8rem; color: #818cf8; margin: 0 0 20px 0; }
+        .call-modal-buttons { display: flex; gap: 10px; }
+        .call-accept-btn { flex: 1; background: #22c55e; color: #000; border: none; border-radius: 12px; padding: 12px; font-weight: 800; font-size: 0.85rem; cursor: pointer; }
+        .call-decline-btn { flex: 1; background: #ef4444; color: #fff; border: none; border-radius: 12px; padding: 12px; font-weight: 800; font-size: 0.85rem; cursor: pointer; }
       `}</style>
     </div>
   );

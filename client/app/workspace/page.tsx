@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import BottomNav from '../../components/BottomNav';
+import { io, Socket } from 'socket.io-client';
 
 interface UserProfile {
   email?: string;
@@ -24,10 +25,10 @@ interface MissionItem {
 
 interface ScheduledCall {
   _id?: string;
-  mentorEmail: string;
-  scheduledDateTime: string;
-  topic: string;
-  roomToken?: string;
+   mentorEmail: string;
+   scheduledDateTime: string;
+   topic: string;
+   roomToken?: string;
 }
 
 type ScreenMode = 'hub' | 'craft_studio' | 'directives' | 'mentorship';
@@ -64,6 +65,9 @@ export default function MobileWorkspaceDeck() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]); 
   const [broadcastText, setBroadcastText] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'partner' | 'public'>('partner');
+
+  // Socket reference for instant calls
+  const socketRef = useRef<Socket | null>(null);
 
   // Play audio chime for PA alarms & Mentor calls
   const playRingChime = () => {
@@ -109,7 +113,7 @@ export default function MobileWorkspaceDeck() {
         if (upcoming) {
           setScheduledCall({
             _id: upcoming._id,
-            mentorEmail: upcoming.mentorEmail,
+            mentorEmail: upcoming.mentorEmail || upcoming.menteeEmail,
             scheduledDateTime: upcoming.scheduledDateTime,
             topic: upcoming.topic,
             roomToken: upcoming.roomToken,
@@ -144,9 +148,42 @@ export default function MobileWorkspaceDeck() {
     fetchScheduledMeetings();
   }, []);
 
-  // PA Reminder & Call Monitoring Timer
+  // Connect Socket.io and listen for real-time remote calls & register user terminal
   useEffect(() => {
-    const interval = setInterval(() => {
+    const email = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
+    if (!email) return;
+
+    const socket = io('https://v26.onrender.com', {
+      transports: ['websocket', 'polling'],
+    });
+    socketRef.current = socket;
+
+    socket.emit('register-user', email);
+
+    const handleIncomingCall = (data: { callerEmail: string; topic: string; roomToken: string }) => {
+      playRingChime();
+      setScheduledCall({
+        mentorEmail: data.callerEmail,
+        scheduledDateTime: new Date().toISOString(),
+        topic: data.topic,
+        roomToken: data.roomToken,
+      });
+      setIsCalling(true);
+    };
+
+    socket.on('incoming-call', handleIncomingCall);
+    socket.on(`incoming-call-${email.toLowerCase().trim()}`, handleIncomingCall);
+
+    return () => {
+      socket.off('incoming-call', handleIncomingCall);
+      socket.off(`incoming-call-${email.toLowerCase().trim()}`, handleIncomingCall);
+      socket.disconnect();
+    };
+  }, [userProfile?.email]);
+
+  // PA Reminder & Call Monitoring Timer (Simultaneous scheduled ring polling)
+  useEffect(() => {
+    const interval = setInterval(async () => {
       const now = new Date();
       const currentHours = String(now.getHours()).padStart(2, '0');
       const currentMinutes = String(now.getMinutes()).padStart(2, '0');
@@ -164,24 +201,43 @@ export default function MobileWorkspaceDeck() {
         }
       });
 
-      // Check scheduled mentor calls
-      if (scheduledCall && !isCalling) {
-        const callTime = new Date(scheduledCall.scheduledDateTime).getTime();
-        const diff = Math.abs(now.getTime() - callTime);
-        // Rings if within 1 minute of scheduled time
-        if (diff < 60000) {
-          const callKey = `call_alerted_${scheduledCall.scheduledDateTime}`;
-          if (!sessionStorage.getItem(callKey)) {
-            sessionStorage.setItem(callKey, 'true');
-            playRingChime();
-            setIsCalling(true);
+      // Background poll to check server meeting times for simultaneous calendar ring
+      const email = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
+      if (email && !isCalling) {
+        try {
+          const res = await axios.get(`https://v26.onrender.com/api/meetings/user/${email}`);
+          if (res.data?.success && Array.isArray(res.data.data)) {
+            const nowTime = now.getTime();
+            res.data.data.forEach((meeting: any) => {
+              if (meeting.status === 'confirmed' || meeting.status === 'in_progress') {
+                const callTime = new Date(meeting.scheduledDateTime).getTime();
+                const diff = Math.abs(nowTime - callTime);
+                if (diff < 60000) {
+                  const callKey = `call_alerted_${meeting._id}_${meeting.scheduledDateTime}`;
+                  if (!sessionStorage.getItem(callKey)) {
+                    sessionStorage.setItem(callKey, 'true');
+                    playRingChime();
+                    setScheduledCall({
+                      _id: meeting._id,
+                      mentorEmail: meeting.mentorEmail || meeting.menteeEmail,
+                      scheduledDateTime: meeting.scheduledDateTime,
+                      topic: meeting.topic,
+                      roomToken: meeting.roomToken,
+                    });
+                    setIsCalling(true);
+                  }
+                }
+              }
+            });
           }
+        } catch (e) {
+          // silent background poll error catch
         }
       }
-    }, 15000);
+    }, 20000);
 
     return () => clearInterval(interval);
-  }, [missionsList, scheduledCall, isCalling]);
+  }, [missionsList, isCalling]);
 
   const handleCreateDirective = async () => {
     if (!newMission.trim()) return;
@@ -194,7 +250,8 @@ export default function MobileWorkspaceDeck() {
       await axios.post('https://v26.onrender.com/api/missions/create-mission', {
         creatorEmail: email,
         title: formattedTitle,
-        timeframe
+        timeframe,
+        scheduledTime: missionTime || undefined
       });
       setNewMission(""); 
       setMissionTime("");
@@ -294,7 +351,7 @@ export default function MobileWorkspaceDeck() {
   return (
     <div className="mobile-hub-root">
 
-      {/* TOP HEADER WITH PROFILE AVATAR (NO // SLATE TEXT) */}
+      {/* TOP HEADER WITH PROFILE AVATAR */}
       <header className="mobile-nav-bar">
         {activeScreen === 'hub' ? (
           <button 
@@ -334,12 +391,11 @@ export default function MobileWorkspaceDeck() {
       <main className="mobile-view-container">
 
         {/* ========================================================
-            1. MAIN HUB SCREEN (LOCKED TO USER'S CRAFT)
+            1. MAIN HUB SCREEN
         ======================================================== */}
         {activeScreen === 'hub' && (
           <div className="drilldown-home">
             
-            {/* LOCKED DEDICATED CRAFT STUDIO (NO SWITCH BUTTON) */}
             <div className="talent-hero-card">
               <div className="talent-hero-top">
                 <span className="talent-tag">ASSIGNED STUDIO ENVIRONMENT</span>
@@ -359,7 +415,6 @@ export default function MobileWorkspaceDeck() {
               </button>
             </div>
 
-            {/* PA Daily Goal Velocity Glance */}
             <div className="hub-summary-card" onClick={() => setActiveScreen('directives')}>
               <div className="summary-col">
                 <span className="summary-number" style={{ color: '#6366f1' }}>{calculateProgress('daily')}%</span>
@@ -377,7 +432,6 @@ export default function MobileWorkspaceDeck() {
               </div>
             </div>
 
-            {/* Hub Menu List */}
             <div className="hub-list-section">
               <span className="hub-section-label">OPERATIONS & MENTORSHIP</span>
 
@@ -419,7 +473,7 @@ export default function MobileWorkspaceDeck() {
 
         {/* ========================================================
             2. PRIMARY CRAFT WORKSPACE SUB-PAGE
-        ======================================================== */}
+        ================================================        */}
         {activeScreen === 'craft_studio' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
@@ -451,7 +505,7 @@ export default function MobileWorkspaceDeck() {
 
         {/* ========================================================
             3. PA DIRECTIVES & TIME-BASED REMINDERS
-        ======================================================== */}
+        ================================================        */}
         {activeScreen === 'directives' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
@@ -460,7 +514,6 @@ export default function MobileWorkspaceDeck() {
               <p className="subpage-desc">Set milestones with exact times. When the time arrives, your terminal will ring and remind you to complete it.</p>
             </div>
 
-            {/* Launch Target with Time Input */}
             <div className="subpage-card">
               <span className="card-kicker">SCHEDULE GOAL / MEETING REMINDER</span>
               <input 
@@ -533,7 +586,7 @@ export default function MobileWorkspaceDeck() {
 
         {/* ========================================================
             4. MENTORSHIP & SYNCHRONIZED CALL ROOM
-        ======================================================== */}
+        ================================================        */}
         {activeScreen === 'mentorship' && (
           <div className="subpage-screen">
             <div className="subpage-banner">
@@ -542,7 +595,6 @@ export default function MobileWorkspaceDeck() {
               <p className="subpage-desc">Schedule 1-on-1 review sessions. Both devices ring simultaneously at the appointed call time.</p>
             </div>
 
-            {/* Mentor Overview Card */}
             <div className="subpage-card">
               <span className="card-kicker">VERIFIED MENTOR BRIDGE</span>
               {userProfile?.partnerEmail ? (
@@ -569,7 +621,6 @@ export default function MobileWorkspaceDeck() {
               )}
             </div>
 
-            {/* Call Scheduler Card */}
             <div className="subpage-card">
               <span className="card-kicker">SCHEDULE SYNCHRONIZED CALL</span>
               {scheduledCall ? (
@@ -585,8 +636,31 @@ export default function MobileWorkspaceDeck() {
                     </div>
                   </div>
                   <div className="call-actions-row">
-                    <button onClick={() => { playRingChime(); setIsCalling(true); }} className="subpage-primary-btn" style={{ flex: 1 }}>
-                      Simulate Ring / Start Call
+                    <button 
+                      onClick={() => {
+                        playRingChime();
+                        setIsCalling(true);
+
+                        const callerEmail = typeof window !== 'undefined' 
+                          ? (localStorage.getItem('v26UserEmail') || userProfile?.email) 
+                          : 'creator@v26.io';
+
+                        const targetEmail = userProfile?.partnerEmail || scheduledCall.mentorEmail;
+                        const roomToken = scheduledCall.roomToken || 'v26-active-session';
+
+                        if (socketRef.current) {
+                          socketRef.current.emit('initiate-call', {
+                            targetEmail,
+                            callerEmail,
+                            topic: scheduledCall.topic || 'Review Session',
+                            roomToken,
+                          });
+                        }
+                      }} 
+                      className="subpage-primary-btn" 
+                      style={{ flex: 1 }}
+                    >
+                      Start Call / Ring Partner
                     </button>
                     <button 
                       onClick={() => {
@@ -691,7 +765,6 @@ export default function MobileWorkspaceDeck() {
           letter-spacing: -0.01em;
         }
 
-        /* Top Nav Header */
         .mobile-nav-bar {
           position: sticky;
           top: 0;
@@ -770,7 +843,6 @@ export default function MobileWorkspaceDeck() {
           padding: 14px 14px 100px 14px;
         }
 
-        /* Talent Hero Card */
         .talent-hero-card {
           background: linear-gradient(135deg, #13131c, #1a172c);
           border: 1px solid rgba(99, 102, 241, 0.25);
@@ -800,7 +872,6 @@ export default function MobileWorkspaceDeck() {
           cursor: pointer;
         }
 
-        /* Summary Card */
         .hub-summary-card {
           display: flex;
           align-items: center;
@@ -816,7 +887,6 @@ export default function MobileWorkspaceDeck() {
         .summary-tag { font-size: 0.58rem; font-weight: 800; color: #71717a; text-transform: uppercase; margin-top: 2px; }
         .summary-line { width: 1px; height: 26px; background: rgba(255, 255, 255, 0.06); }
 
-        /* Hub Menu Rows */
         .hub-list-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
         .hub-section-label {
           font-size: 0.6rem;
@@ -854,7 +924,6 @@ export default function MobileWorkspaceDeck() {
         .hub-cell-badge { font-size: 0.62rem; font-weight: 800; color: #818cf8; background: #1e1b4b; padding: 3px 8px; border-radius: 10px; }
         .hub-cell-arrow { font-size: 1.2rem; color: #52525b; font-weight: 600; }
 
-        /* Sub-Pages Style */
         .subpage-screen { display: flex; flex-direction: column; gap: 14px; }
         .subpage-banner { margin-bottom: 4px; }
         .craft-badge {
@@ -992,7 +1061,6 @@ export default function MobileWorkspaceDeck() {
         .entry-trash-btn { background: transparent; border: none; color: #71717a; cursor: pointer; }
         .empty-subpage-state { text-align: center; color: #52525b; font-size: 0.8rem; padding: 24px 0; }
 
-        /* Mentorship & Call Scheduling */
         .mentor-live-row { display: flex; gap: 12px; align-items: center; }
         .mentor-crest {
           width: 44px;
@@ -1018,7 +1086,6 @@ export default function MobileWorkspaceDeck() {
         .call-actions-row { display: flex; gap: 8px; }
         .call-cancel-btn { background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); color: #71717a; border-radius: 10px; padding: 8px 14px; font-size: 0.75rem; cursor: pointer; }
 
-        /* Alarms & Modals */
         .alarm-modal-backdrop {
           position: fixed;
           inset: 0;
@@ -1048,7 +1115,6 @@ export default function MobileWorkspaceDeck() {
         .alarm-btn-done { background: #22c55e; color: #000; border: none; border-radius: 10px; padding: 12px; font-weight: 800; font-size: 0.85rem; cursor: pointer; }
         .alarm-btn-dismiss { background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); color: #71717a; border-radius: 10px; padding: 10px; font-size: 0.78rem; cursor: pointer; }
 
-        /* Call Ringing Sheet */
         .call-ring-sheet {
           background: #13131c;
           border: 1px solid #22c55e;

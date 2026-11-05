@@ -10,6 +10,11 @@ const projectRoutes = require("./routes/projectRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const postRoutes = require('./routes/postRoutes');
 const missionRoutes = require("./routes/missionRoutes"); // ⬅️ IMPORT MISSIONS ROUTER
+const meetingRoutes = require('./routes/meetingRoutes');
+
+// Mount mentorship meeting endpoints
+app.use('/api/meetings', meetingRoutes);
+
 
 const app = express();
 connectDB();

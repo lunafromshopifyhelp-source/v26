@@ -1,4 +1,6 @@
 // server/src/app.js
+const http = require('http');
+const initSignalingServer = require('./socket');
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db"); // Ensure this path is correct
@@ -24,8 +26,11 @@ app.get("/", (req, res) => {
   res.send("Vision 2026 API is running");
 });
 
-// Start server
+const server = http.createServer(app);
+initSignalingServer(server);
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+
+server.listen(PORT, () => {
+  console.log(`v26 server & signaling running on port ${PORT}`);
 });

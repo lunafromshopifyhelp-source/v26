@@ -23,9 +23,11 @@ interface MissionItem {
 }
 
 interface ScheduledCall {
+  _id?: string;
   mentorEmail: string;
   scheduledDateTime: string;
   topic: string;
+  roomToken?: string;
 }
 
 type ScreenMode = 'hub' | 'craft_studio' | 'directives' | 'mentorship';
@@ -54,7 +56,6 @@ export default function MobileWorkspaceDeck() {
 
   // PA Reminder Alarm State
   const [activeAlarmTask, setActiveAlarmTask] = useState<MissionItem | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
 
   // Locked User Primary Craft
   const [userTalent, setUserTalent] = useState<string>('Music Architecture');
@@ -95,6 +96,33 @@ export default function MobileWorkspaceDeck() {
     } catch (err) { console.error(err); }
   };
 
+  const fetchScheduledMeetings = async () => {
+    const email = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
+    if (!email) return;
+    try {
+      const res = await axios.get(`https://v26.onrender.com/api/meetings/user/${email}`);
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        const upcoming = res.data.data
+          .filter((m: any) => m.status === 'confirmed' || m.status === 'in_progress')
+          .sort((a: any, b: any) => new Date(a.scheduledDateTime).getTime() - new Date(b.scheduledDateTime).getTime())[0];
+
+        if (upcoming) {
+          setScheduledCall({
+            _id: upcoming._id,
+            mentorEmail: upcoming.mentorEmail,
+            scheduledDateTime: upcoming.scheduledDateTime,
+            topic: upcoming.topic,
+            roomToken: upcoming.roomToken,
+          });
+        } else {
+          setScheduledCall(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load meetings from server:", err);
+    }
+  };
+
   const fetchProfile = async () => {
     const email = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
     if (!email) return;
@@ -113,12 +141,7 @@ export default function MobileWorkspaceDeck() {
   useEffect(() => {
     fetchProfile();
     fetchMissions();
-
-    // Check saved mentor call
-    const savedCall = localStorage.getItem('v26ScheduledCall');
-    if (savedCall) {
-      try { setScheduledCall(JSON.parse(savedCall)); } catch (e) {}
-    }
+    fetchScheduledMeetings();
   }, []);
 
   // PA Reminder & Call Monitoring Timer
@@ -168,7 +191,7 @@ export default function MobileWorkspaceDeck() {
       : newMission.trim();
 
     try {
-      const res = await axios.post('https://v26.onrender.com/api/missions/create-mission', {
+      await axios.post('https://v26.onrender.com/api/missions/create-mission', {
         creatorEmail: email,
         title: formattedTitle,
         timeframe
@@ -216,17 +239,36 @@ export default function MobileWorkspaceDeck() {
     } finally { setIsLinking(false); }
   };
 
-  const handleScheduleCall = () => {
+  const handleScheduleCall = async () => {
+    const myEmail = typeof window !== 'undefined' ? localStorage.getItem('v26UserEmail') : null;
+    const mentorEmail = userProfile?.partnerEmail;
+
+    if (!myEmail) return alert("Please sign in to schedule a session.");
+    if (!mentorEmail) return alert("Connect a mentor before scheduling a session.");
     if (!callDateTime) return alert("Select date and time for the review call.");
-    const callData: ScheduledCall = {
-      mentorEmail: userProfile?.partnerEmail || "mentor@v26.io",
-      scheduledDateTime: callDateTime,
-      topic: callTopic.trim() || "Milestone & Craft Review"
-    };
-    setScheduledCall(callData);
-    localStorage.setItem('v26ScheduledCall', JSON.stringify(callData));
-    alert(`Synchronized Review Call set for ${new Date(callDateTime).toLocaleString()}. Both terminals will ring at call time.`);
-    setCallTopic('');
+
+    try {
+      const payload = {
+        mentorEmail,
+        menteeEmail: myEmail,
+        scheduledDateTime: new Date(callDateTime).toISOString(),
+        topic: callTopic.trim() || `${userTalent} Milestone Review`,
+        craftDomain: userTalent,
+        durationMinutes: 30,
+      };
+
+      const res = await axios.post('https://v26.onrender.com/api/meetings/schedule', payload);
+
+      if (res.data?.success) {
+        alert(`Synchronized Review Call scheduled for ${new Date(callDateTime).toLocaleString()}. Persisted to database.`);
+        setCallTopic('');
+        setCallDateTime('');
+        fetchScheduledMeetings();
+      }
+    } catch (err: any) {
+      console.error("Schedule error:", err);
+      alert(err.response?.data?.message || "Failed to schedule meeting on server.");
+    }
   };
 
   const handleBroadcast = (domainName: string) => async () => {
@@ -549,11 +591,10 @@ export default function MobileWorkspaceDeck() {
                     <button 
                       onClick={() => {
                         setScheduledCall(null);
-                        localStorage.removeItem('v26ScheduledCall');
                       }} 
                       className="call-cancel-btn"
                     >
-                      Cancel
+                      Clear
                     </button>
                   </div>
                 </div>
@@ -622,8 +663,9 @@ export default function MobileWorkspaceDeck() {
             <div className="call-modal-buttons">
               <button 
                 onClick={() => {
-                  alert("Connecting secure WebRTC audio/video bridge...");
                   setIsCalling(false);
+                  const token = scheduledCall?.roomToken || 'v26-active-session';
+                  router.push(`/room/${token}`);
                 }} 
                 className="call-accept-btn"
               >
